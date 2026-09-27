@@ -1,0 +1,13 @@
+--- !tapi-tbd
+# Minimal text stub for /usr/lib/libSystem.B.dylib listing only the symbols
+# Hellbyte uses, so macOS binaries can be linked without Apple's SDK.
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/usr/lib/libSystem.B.dylib'
+current-version: 1319
+exports:
+  - targets:     [ x86_64-macos, arm64-macos ]
+    symbols:     [ ___error, _close, _dlopen, _dlsym, _exit, _ioctl, _mach_absolute_time,
+                   _mach_timebase_info, _mkdir, _open, _read, _tcgetattr, _tcsetattr,
+                   _usleep, _write, dyld_stub_binder ]
+...

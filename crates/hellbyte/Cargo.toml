@@ -1,0 +1,18 @@
+[package]
+name = "hellbyte"
+description = "A tiny, libre, retro first-person shooter that runs on almost anything"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "hellbyte"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+hellbyte-engine = { path = "../engine" }
+hellbyte-rt = { path = "../rt" }

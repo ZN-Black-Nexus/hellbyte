@@ -1,0 +1,87 @@
+# E1M5 - The Breach
+# Original level, the end of the episode. A round arena under the hell sky,
+# ringed by a lava moat. The gate to the exit is a solid block tagged 666:
+# it sinks when the last juggernaut falls. The start corridor hides an
+# armory with the arc cannon.
+
+map E1M5 "The Breach"
+sky 1
+par 120
+
+style armory  floor=0 ceil=112 light=176 ftex=FLOOR2 ctex=CEILLITE wall=TECH1
+style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
+style secdoor from=door upper=TECH1 wall=TECH1 door=door_stay
+style secret  floor=0 ceil=112 light=144 ftex=FLOOR4 ctex=CEIL2 wall=LIGHT1 special=secret
+style moat    floor=-24 ceil=384 light=255 ftex=LAVA1 ctex=SKY wall=HELLROCK special=damage20
+style arena   floor=0 ceil=384 light=192 ftex=HELLFLR ctex=SKY wall=HELLROCK lower=HELLROCK
+style dais    from=arena floor=24 ftex=MARBFLR lower=MARBLE1 light=224
+style bridge  from=arena ftex=FLOOR4 lower=SUPPORT1
+style frame   floor=0 ceil=128 light=176 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=HELLROCK
+style gate    floor=256 ceil=256 light=160 ftex=HELLFLR ctex=HELLFLR wall=HELLROCK lower=HELLROCK tag=666
+style exitrm  floor=0 ceil=128 light=208 ftex=MARBFLR ctex=CEILLITE wall=MARBLE1
+
+# ---- start corridor (armory) and its secret
+rect armory  0 0 384 128
+rect door    384 32 400 96
+rect secdoor 160 128 224 144
+rect secret  128 144 256 272
+line 160 128 224 128 flags=secret
+
+# ---- the arena and its lava moat
+ngon moat    896 64 448 12
+ngon arena   896 64 360 12
+rect bridge  400 32 560 96
+rect frame   400 16 432 112
+rect bridge  1232 32 1344 96
+ngon dais    896 64 96 8
+ngon void    896 304 28 6
+ngon void    896 -176 28 6
+ngon void    656 64 28 6
+ngon void    1136 64 28 6
+
+# ---- the gate (sinks when the juggernauts die) and the exit
+rect gate    1344 16 1408 112
+rect exitrm  1408 -32 1600 160
+switch 1600 32 1600 96 special=s1_exit tex=EXITSW0
+
+# ---- things
+thing player1      48 64 0
+thing armor_blue   200 96 0 easy normal
+thing armor_green  200 96 0 hard
+thing rocket_box   300 32
+thing shell_box    300 96
+thing medkit       120 32
+thing lamp         24 16
+thing lamp         24 112
+
+thing arc_cannon   192 208 270
+thing cell_pack    160 176
+thing cell_pack    224 176
+thing vital_orb    192 240 0 hard
+
+thing juggernaut   1050 200 180
+thing juggernaut   1050 -80 180 normal hard
+thing juggernaut   760 260 270 hard
+thing gazer        980 300 270
+thing gazer        980 -170 90 normal hard
+thing fiend        700 -150 0
+thing fiend        1150 250 180
+thing fiend        1100 -150 180 normal hard
+thing heavy        640 200 0 hard
+
+thing vital_orb    896 64 0 easy normal
+thing medkit       896 64 0 hard
+thing rocket_box   700 64
+thing rocket_box   1090 64 0 easy normal
+thing cell_pack    896 220
+thing medkit       896 -90
+thing medkit       780 -60 0 easy
+thing torch        840 10
+thing torch        952 10
+thing torch        840 118
+thing torch        952 118
+
+thing health_bonus 1450 64
+thing health_bonus 1500 64
+thing lamp         1424 -16
+thing lamp         1424 144

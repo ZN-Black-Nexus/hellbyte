@@ -1,0 +1,143 @@
+# E1M1 - Intake
+# An original level for Hellbyte. Layout: start bay -> corridor -> control
+# room; south to the coolant pit (lift, sludge, scattergun), north down the
+# steps into the yard, find the red keycard in the shack, exit through the
+# red door. Secret closet behind the bay's north wall.
+
+map E1M1 "Intake"
+sky 0
+par 90
+
+style bay     floor=0 ceil=144 light=176 ftex=FLOOR1 ctex=CEIL1 wall=BASE1
+style baylamp from=bay ctex=CEILLITE light=208
+style crate   floor=48 ceil=144 ftex=CRATETOP ctex=CEIL1 wall=CRATE1 lower=CRATE1 light=176
+style hall    floor=0 ceil=112 light=144 ftex=FLOOR4 ctex=CEIL2 wall=TECH1
+style hallflk from=hall special=light_flicker light=192
+style ctrl    floor=16 ceil=160 light=176 ftex=FLOOR2 ctex=CEIL1 wall=COMP1 lower=STEP1
+style ctrlamp from=ctrl ctex=CEILLITE light=200
+style desk    from=ctrl floor=48 ftex=FLOOR2 lower=COMP1
+style window  floor=64 ceil=112 light=176 ftex=FLOOR4 ctex=CEIL2 wall=METAL1 upper=BASE3 lower=BASE3
+style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
+style door16  from=door floor=16 ceil=16
+style reddoor from=door upper=DOORRED door=door_red_repeat
+style secdoor from=door upper=BASE1 wall=BASE1 door=door_stay
+style secret  floor=0 ceil=112 light=112 ftex=FLOOR4 ctex=CEIL2 wall=PIPES1 special=secret
+style pit     floor=-48 ceil=208 light=144 ftex=FLOOR2 ctex=CEIL2 wall=STONE2 lower=STONE2
+style balcony from=pit floor=16 ftex=FLOOR4 lower=SUPPORT1
+style lift    from=pit floor=16 ftex=STEPTOP lower=LIFT1 door=sr_lift tag=7
+style sludge  from=pit floor=-64 ftex=NUKAGE1 special=damage5 light=176
+style walk    from=pit floor=-40 ftex=FLOOR4 lower=SUPPORT1
+style yard    floor=-32 ceil=320 light=224 ftex=GRASS1 ctex=SKY wall=ROCK1
+style shack   floor=-32 ceil=96 light=144 ftex=FLOOR3 ctex=CEIL1 wall=BRICK2 upper=BRICK2
+style exitrm  floor=-32 ceil=96 light=192 ftex=FLOOR3 ctex=CEILLITE wall=METAL1
+# low-ceilinged recesses in front of doors that open onto the tall yard
+style frame   from=yard ceil=96 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=ROCK1
+style landing floor=16 ceil=144 light=208 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=BASE3
+
+# ---- start bay
+rect bay     0 0 448 384
+rect baylamp 160 128 288 256
+rect crate   32 288 96 352
+rect crate   96 304 144 352
+rect crate   352 32 416 96
+rect door    448 160 464 224
+
+# ---- secret closet behind the north wall
+rect secdoor 192 384 256 400
+rect secret  176 400 272 480
+line 192 384 256 384 flags=secret
+
+# ---- corridor
+rect hall    464 144 720 240
+rect hallflk 560 144 624 240
+
+# ---- control room
+rect ctrl    720 64 1040 448
+rect ctrlamp 816 192 944 320
+rect desk    784 368 960 400
+rect window  832 448 928 464
+rect door16  960 448 1024 464
+rect door16  912 48 976 64
+
+# ---- coolant pit (south)
+rect pit     752 -448 1296 48
+rect balcony 752 -32 1296 48
+rect lift    1168 -112 1232 -32
+rect sludge  848 -384 1104 -176
+rect walk    944 -384 1008 -176
+
+# ---- the yard (north, open sky)
+rect yard    688 464 1488 1104
+rect landing 944 464 1040 512
+stairs yard  960 512 1024 592 5 s step=8
+line 688 464 832 464 mid=BASE3
+line 928 464 944 464 mid=BASE3
+line 1040 464 1488 464 mid=BASE3
+ngon void    1120 720 40 6
+ngon void    880 928 32 8
+
+# shack with the red keycard
+rect void    1200 880 1424 1072
+rect shack   1216 896 1408 1056
+rect door    1280 880 1344 896 floor=-32 ceil=-32
+rect frame   1264 848 1360 880
+
+# ---- exit room behind the red door
+rect reddoor 672 800 688 864 floor=-32 ceil=-32
+rect frame   688 784 720 880
+rect exitrm  480 736 672 928
+switch 480 800 480 864 special=s1_exit tex=EXITSW0
+
+# ---- things
+thing player1      96 192 0
+thing health_bonus 200 192
+thing health_bonus 240 192
+thing health_bonus 280 192
+thing clip         384 320
+thing barrel       400 256
+thing barrel       416 216
+thing lamp         144 64
+thing lamp         144 320
+thing drone        680 192 180
+thing drone        660 160 180 hard
+thing stimpack     600 224
+
+thing armor_green  224 448
+thing stimpack     200 424
+thing stimpack     248 424
+
+thing drone        960 256 180
+thing drone        992 128 180 normal hard
+thing clip         880 288
+thing ammo_box     1008 416 0 easy
+
+thing shotgun      976 -352 90
+thing shells       960 -220
+thing shells       992 -220 easy normal
+thing fiend        800 -300 90
+thing fiend        1200 -260 90
+thing fiend        1240 -400 90 hard
+thing drone        1000 0 270
+thing drone        860 8 270 normal hard
+thing barrel       780 -420
+thing barrel       810 -410
+thing medkit       1270 -420
+
+thing fiend        1100 880 270
+thing fiend        900 1040 270
+thing fiend        1400 640 180 normal hard
+thing drone        800 720 0
+thing drone        1300 560 90
+thing drone        1450 760 180 hard
+thing medkit       760 1060
+thing shells       1150 600
+thing torch        1240 836
+thing torch        1384 836
+thing key_red      1312 976
+thing fiend        1360 1016 270 ambush
+thing health_bonus 1250 1020
+thing health_bonus 1280 1020
+
+thing health_bonus 576 832
+thing lamp         512 768
+thing lamp         512 896

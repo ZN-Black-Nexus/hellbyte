@@ -1,0 +1,16 @@
+[package]
+name = "hellbyte-engine"
+description = "Hellbyte game engine: no_std, no heap, fixed-point, runs anywhere"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+test = false
+bench = false
+
+[build-dependencies]
+hellbyte-mapc = { path = "../mapc" }

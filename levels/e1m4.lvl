@@ -1,0 +1,140 @@
+# E1M4 - Deep Storage
+# Original level. A dark warehouse full of crates. The switch in the south
+# office raises the shutter to the exit wing; the red keycard waits on the
+# mezzanine; cold storage behind the red door holds the blue keycard and the
+# pulse rifle; the blue door ends the level. The loading dock hides a room.
+
+map E1M4 "Deep Storage"
+sky 0
+par 180
+
+style dock    floor=0 ceil=160 light=176 ftex=FLOOR1 ctex=CEIL1 wall=BASE3
+style wh      floor=0 ceil=256 light=112 ftex=CEMENTF ctex=CEIL2 wall=METAL1 lower=CRATE1
+style whlit   from=wh light=192 special=light_flicker
+style whglow  from=wh light=176 special=light_glow
+style crate24 from=wh floor=24 ftex=CRATETOP
+style crate64 from=wh floor=64 ftex=CRATETOP
+style crate128 from=wh floor=128 ftex=CRATETOP
+style mezz    from=wh floor=96 ftex=FLOOR4 lower=SUPPORT1 light=144
+style frame   floor=0 ceil=128 light=144 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=METAL1
+style mframe  from=frame floor=96 ceil=224
+style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
+style reddoor from=door floor=96 ceil=96 upper=DOORRED door=door_red_repeat
+style bluedoor from=door upper=DOORBLU door=door_blue_repeat
+style shutter from=door upper=LIFT1 door=none tag=5
+style secdoor from=door upper=BASE3 wall=BASE3 door=door_stay
+style secret  floor=0 ceil=112 light=96 ftex=WOODFLR ctex=CEIL2 wall=WOOD1 special=secret
+style cold    floor=96 ceil=224 light=96 ftex=MARBFLR ctex=CEIL1 wall=STONE2
+style coldlit from=cold ctex=CEILLITE light=160 special=light_strobe_slow
+style office  floor=0 ceil=128 light=176 ftex=FLOOR3 ctex=CEILLITE wall=COMP1
+style exitway floor=0 ceil=128 light=144 ftex=FLOOR4 ctex=CEIL2 wall=TECH1
+style exitrm  floor=0 ceil=128 light=192 ftex=FLOOR3 ctex=CEILLITE wall=METAL1
+
+# ---- loading dock + secret room
+rect dock    0 0 384 256
+rect door    384 96 400 160
+rect secdoor 160 -16 224 0
+rect secret  128 -144 256 -16
+line 160 0 224 0 flags=secret
+
+# ---- warehouse floor
+rect wh      400 -256 1296 640
+rect frame   400 80 432 176
+rect crate64 528 256 656 384
+rect crate128 560 288 624 352
+rect crate24 656 256 704 304
+rect crate64 800 -128 928 0
+rect crate24 928 -128 976 -80
+rect crate128 1024 256 1152 384
+rect crate64 1152 256 1216 320
+rect crate64 560 -192 688 -64
+rect crate24 688 -192 736 -144
+rect crate128 1088 -224 1216 -128
+rect crate64 464 16 528 80
+rect whlit   736 96 864 224
+rect whlit   1000 -200 1080 -120
+rect whglow  880 400 976 480
+
+# ---- mezzanine along the north wall (red keycard)
+rect mezz    464 528 1232 640
+stairs wh    1232 448 1296 640 4 n step=24
+rect mframe  720 608 816 640
+rect reddoor 736 640 800 656
+
+# ---- cold storage (blue keycard, pulse rifle)
+rect cold    608 656 928 912
+rect coldlit 704 736 832 848
+rect void    640 848 704 880
+rect void    832 848 896 880
+
+# ---- office (switch opens the shutter)
+rect frame   784 -256 880 -224
+rect door    800 -272 864 -256
+rect office  704 -512 960 -272
+switch 800 -512 864 -512 special=s1_door_open_stay tag=5
+
+# ---- shutter -> exit wing -> blue door
+rect frame   1264 112 1296 208
+rect shutter 1296 128 1312 192
+rect exitway 1312 96 1536 224
+rect bluedoor 1536 128 1552 192
+rect exitrm  1552 64 1744 256
+switch 1744 128 1744 192 special=s1_exit tex=EXITSW0
+
+# ---- things
+thing player1      64 128 0
+thing clip         300 40
+thing shells       300 220
+thing lamp         32 32
+thing lamp         32 224
+thing barrel       340 128
+
+thing adrenaline   192 -80
+thing cell_pack    160 -120
+thing stimpack     224 -120
+
+thing ripper       650 150 180 ambush
+thing ripper       900 -200 90 ambush
+thing ripper       1100 100 180 normal hard
+thing ripper       500 -150 0 ambush hard
+thing enforcer     1000 480 270
+thing enforcer     760 -40 90 normal hard
+thing heavy        1200 -40 180
+thing fiend        950 180 180
+thing fiend        450 400 0
+thing drone        700 450 270
+thing drone        1150 460 180 hard
+thing barrel       980 -40
+thing barrel       1000 -70
+thing barrel       620 480
+thing shell_box    870 -60
+thing medkit       1250 -230
+thing ammo_box     450 -230
+thing health_bonus 900 420
+thing health_bonus 930 440
+thing health_bonus 960 420
+
+thing key_red      600 580
+thing enforcer     1000 600 180
+thing heavy        520 580 0 normal hard
+thing rockets      1100 590
+
+thing key_blue     768 800
+thing plasma       768 760 270
+thing cell         700 700
+thing cell         836 700 easy normal
+thing gazer        680 760 0
+thing gazer        860 820 180 normal hard
+thing ripper       770 880 270 ambush
+thing medkit       650 700
+
+thing drone        850 -400 90
+thing enforcer     740 -460 0 hard
+thing stimpack     920 -480
+thing pillar       720 -288
+thing pillar       944 -288
+
+thing fiend        1450 160 180 ambush
+thing heavy        1500 190 180 ambush hard
+thing medkit       1700 100
+thing health_bonus 1700 220

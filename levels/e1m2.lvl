@@ -1,0 +1,136 @@
+# E1M2 - Coolant Works
+# Original level. The canal hall is the hub: the pump hall to the north has
+# the rotary cannon, the booth block to the south hides the blue keycard up a
+# lift, and the blue door in the east wall leads to the exit.
+
+map E1M2 "Coolant Works"
+sky 0
+par 120
+
+style entry   floor=0 ceil=128 light=160 ftex=FLOOR2 ctex=CEIL1 wall=BASE2
+style hall    floor=0 ceil=224 light=176 ftex=FLOOR1 ctex=CEIL2 wall=STONE1 lower=STONE2
+style hallamp from=hall ctex=CEILLITE light=208
+style canal   floor=-40 ceil=224 light=176 ftex=NUKAGE1 ctex=CEIL2 wall=STONE2 special=damage10
+style bridge  floor=0 ceil=224 light=176 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 lower=SUPPORT1
+style frame   floor=0 ceil=128 light=160 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=STONE1
+style pframe  from=frame upper=PIPES1
+style sframe  from=frame upper=BASE1
+style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
+style bluedoor from=door upper=DOORBLU door=door_blue_repeat
+style secdoor from=door upper=PIPES1 wall=PIPES1 door=door_stay
+style secret  floor=0 ceil=112 light=96 ftex=FLOOR4 ctex=CEIL2 wall=CEMENT1 special=secret
+style pump    floor=0 ceil=192 light=144 ftex=FLOOR4 ctex=CEIL2 wall=PIPES1 lower=STEP1
+style pumplit from=pump special=light_flicker light=192
+style ledge   from=pump floor=48 ftex=FLOOR2 lower=METAL1
+style south   floor=0 ceil=160 light=144 ftex=FLOOR3 ctex=CEIL1 wall=BASE1
+style southdk from=south light=96
+style booth   floor=64 ceil=160 light=192 ftex=FLOOR2 ctex=CEILLITE wall=COMP1 lower=COMP1
+style lift    floor=64 ceil=160 light=160 ftex=STEPTOP ctex=CEIL1 wall=BASE1 lower=LIFT1 door=sr_lift tag=4
+style ecorr   floor=0 ceil=112 light=128 ftex=FLOOR4 ctex=CEIL2 wall=TECH1
+style ecorrlt from=ecorr special=light_strobe_slow light=176
+style exitrm  floor=0 ceil=128 light=192 ftex=FLOOR3 ctex=CEILLITE wall=METAL1
+
+# ---- entry
+rect entry   0 128 320 384
+rect door    320 160 336 224
+
+# ---- canal hall (hub)
+rect hall    336 64 1088 624
+rect hallamp 640 128 768 224
+rect hallamp 640 464 768 560
+rect canal   336 288 1088 400
+rect bridge  512 288 576 400
+rect bridge  848 288 912 400
+ngon void    448 176 24 8
+ngon void    976 176 24 8
+ngon void    448 512 24 8
+ngon void    976 512 24 8
+rect frame   336 144 368 240
+rect frame   656 592 752 624
+rect frame   656 64 752 96
+rect frame   1056 432 1088 528
+
+# ---- pump hall (north)
+rect door    672 624 736 640
+rect pframe  656 640 752 672
+rect pump    448 640 960 1024
+rect pumplit 592 752 816 912
+rect void    512 736 576 800
+rect void    832 736 896 800
+rect void    512 864 576 928
+rect void    832 864 896 928
+stairs pump  576 944 640 1008 3 e step=16
+rect ledge   640 928 800 1024
+rect secdoor 432 800 448 864
+rect secret  336 784 432 880
+line 448 800 448 864 flags=secret
+
+# ---- booth block (south)
+rect door    672 48 736 64
+rect sframe  656 16 752 48
+rect south   448 -320 960 48
+rect southdk 448 -320 608 -96
+rect booth   752 -288 928 -96
+rect lift    688 -224 752 -160
+
+# ---- exit wing (east, blue door)
+rect bluedoor 1088 448 1104 512
+rect ecorr   1104 432 1360 528
+rect ecorrlt 1200 432 1264 528
+rect exitrm  1360 368 1552 592
+switch 1552 448 1552 512 special=s1_exit tex=EXITSW0
+
+# ---- things
+thing player1      64 256 0
+thing clip         160 160
+thing stimpack     160 352
+thing lamp         32 160
+thing lamp         32 352
+
+thing drone        560 160 180
+thing drone        820 200 180
+thing drone        700 540 270 normal hard
+thing enforcer     900 560 180
+thing enforcer     1000 120 180 hard
+thing fiend        600 480 270
+thing fiend        1040 580 180 normal hard
+thing barrel       420 250
+thing barrel       450 440
+thing barrel       1040 250
+thing shells       700 180
+thing shells       700 510 easy
+thing medkit       1060 100
+
+thing enforcer     700 760 270
+thing enforcer     900 980 180 normal hard
+thing drone        500 980 0
+thing drone        900 700 90
+thing fiend        640 820 270 hard
+thing chaingun     720 980 270
+thing clip         680 700
+thing health_bonus 600 880
+thing health_bonus 640 880
+thing health_bonus 680 880
+
+thing backpack     384 832
+thing armor_green  384 808 0 easy normal
+thing armor_blue   384 808 0 hard
+thing cell         400 856 0 easy
+
+thing ripper       520 -250 0 ambush
+thing ripper       580 -140 0 ambush normal hard
+thing ripper       900 -40 180 hard
+thing fiend        850 -20 270
+thing drone        500 0 270
+thing key_blue     840 -192
+thing stimpack     880 -250
+thing shells       600 -280
+thing pillar       640 -300
+thing pillar       640 16
+
+thing enforcer     1300 480 180 ambush
+thing drone        1240 460 180 normal hard
+thing medkit       1456 400
+thing health_bonus 1456 560
+thing lamp         1392 400
+thing lamp         1392 560

@@ -1,0 +1,162 @@
+# Linux targets link with rust-lld, no libc, fully static (see crates/hellbyte/build.rs).
+# SPARC, m68k and C-SKY use GNU ld via scripts/linker (rust-lld has no backend for them).
+# Build with:  cargo build --release --target <triple>   (tier-3 triples need nightly + -Z build-std=core)
+
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.i686-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.i586-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.aarch64_be-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.arm-unknown-linux-musleabi]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.arm-unknown-linux-musleabihf]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.armv5te-unknown-linux-musleabi]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.armv7-unknown-linux-musleabi]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.armv4t-unknown-linux-gnueabi]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.armeb-unknown-linux-gnueabi]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mips-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mipsel-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mips64-openwrt-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mips64-unknown-linux-muslabi64]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mips64el-unknown-linux-muslabi64]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mipsisa32r6-unknown-linux-gnu]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mipsisa32r6el-unknown-linux-gnu]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mipsisa64r6-unknown-linux-gnuabi64]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.mipsisa64r6el-unknown-linux-gnuabi64]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.powerpc-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.powerpc-unknown-linux-muslspe]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.powerpc64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.powerpc64le-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.riscv64gc-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.riscv32gc-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.loongarch64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.s390x-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.sparc64-unknown-linux-gnu]
+linker = "scripts/linker/sparc64-linux-gnu-ld"
+rustflags = ["-C", "linker-flavor=ld", "-C", "relocation-model=static", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.sparc-unknown-linux-gnu]
+linker = "scripts/linker/sparc64-linux-gnu-ld"
+rustflags = ["-C", "linker-flavor=ld", "-C", "relocation-model=static", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start", "-C", "link-arg=-melf32_sparc"]
+
+[target.m68k-unknown-linux-gnu]
+linker = "scripts/linker/m68k-linux-gnu-ld"
+rustflags = ["-C", "linker-flavor=ld", "-C", "relocation-model=static", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.csky-unknown-linux-gnuabiv2]
+linker = "scripts/linker/csky-linux-gnuabiv2-ld"
+rustflags = ["-C", "linker-flavor=ld", "-C", "relocation-model=static", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+[target.hexagon-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "relocation-model=static", "-C", "link-self-contained=no", "-C", "link-arg=-nostdlib", "-C", "link-arg=-static", "-C", "link-arg=--entry=_start"]
+
+# Windows: no C runtime; Win32 imported via raw-dylib; linked by rust-lld.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=lld-link", "-C", "link-arg=/ENTRY:WinMainCRTStartup", "-C", "link-arg=/SUBSYSTEM:WINDOWS,5.02", "-C", "link-arg=/NODEFAULTLIB", "-C", "link-arg=/STACK:1048576,1048576"]
+
+[target.i686-pc-windows-msvc]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=lld-link", "-C", "link-arg=/ENTRY:WinMainCRTStartup", "-C", "link-arg=/SUBSYSTEM:WINDOWS,5.01", "-C", "link-arg=/NODEFAULTLIB", "-C", "link-arg=/STACK:1048576,1048576", "-C", "link-arg=/SAFESEH:NO"]
+
+[target.aarch64-pc-windows-msvc]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=lld-link", "-C", "link-arg=/ENTRY:WinMainCRTStartup", "-C", "link-arg=/SUBSYSTEM:WINDOWS,6.02", "-C", "link-arg=/NODEFAULTLIB", "-C", "link-arg=/STACK:1048576,1048576"]
+
+# macOS: links only libSystem (via crates/hellbyte/macos/libSystem.tbd) with
+# rust-lld's Mach-O linker; Cocoa is loaded at run time with dlopen.
+[target.aarch64-apple-darwin]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld64.lld", "-C", "link-arg=-dead_strip"]
+
+[target.x86_64-apple-darwin]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld64.lld", "-C", "link-arg=-dead_strip"]

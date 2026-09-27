@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs a GNU cross linker for architectures that rust-lld cannot link
+# (SPARC, m68k, C-SKY). Invoked through symlinks named after the real tool,
+# e.g. `sparc64-linux-gnu-ld`. Tools are fetched by scripts/fetch-tools.sh.
+T=${HELLBYTE_TOOLS:-$HOME/.cache/hellbyte-tools}
+tool=$(basename "$0")
+for dir in "$T/binutils/usr" "$T/csky"; do
+  if [ -x "$dir/bin/$tool" ]; then
+    LD_LIBRARY_PATH="$dir/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$dir/bin/$tool" "$@"
+  fi
+done
+if command -v "$tool" >/dev/null 2>&1; then exec "$tool" "$@"; fi
+echo "gnu-ld: $tool not found; run scripts/fetch-tools.sh" >&2
+exit 127

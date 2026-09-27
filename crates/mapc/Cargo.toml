@@ -1,0 +1,10 @@
+[package]
+name = "hellbyte-mapc"
+description = "Level compiler for Hellbyte: text level sources -> BSP, segs, blockmap (as Rust statics)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"

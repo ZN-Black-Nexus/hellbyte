@@ -1,0 +1,125 @@
+# E1M3 - Relay Tower
+# Original level. A rocky plateau under a red sky. The relay tower in the
+# middle hides the yellow keycard up a lift; the north bunker has the rocket
+# launcher and a teleporter back to the tower; the exit is a yellow-key cave
+# in the east cliff. One cliff face in the north-west isn't what it seems.
+
+map E1M3 "Relay Tower"
+sky 1
+par 150
+
+style plateau floor=0 ceil=384 light=208 ftex=DIRT1 ctex=SKY wall=ROCK2 lower=ROCK2
+style rise    from=plateau floor=24 ftex=ROCKFLR
+style lava    from=plateau floor=-24 ftex=LAVA1 light=255 special=damage20
+style bunker  floor=0 ceil=128 light=160 ftex=CEMENTF ctex=CEIL1 wall=CEMENT1
+style frame   floor=0 ceil=128 light=176 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=CEMENT1
+style tframe  from=frame upper=TECH1
+style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
+style ydoor   from=door upper=DOORYEL door=door_yellow_repeat
+style tower   floor=0 ceil=256 light=176 ftex=FLOOR2 ctex=CEIL2 wall=TECH1 lower=METAL1
+style towerlt from=tower ctex=CEILLITE light=224
+style perch   from=tower floor=128 ftex=FLOOR1
+style lift    from=tower floor=128 ftex=STEPTOP lower=LIFT1 door=sr_lift tag=9
+style nbunk   floor=0 ceil=128 light=144 ftex=FLOOR1 ctex=CEIL1 wall=BASE2
+style pad     from=nbunk ftex=TELEPAD light=208 door=wr_teleport tag=12
+style tdest   from=plateau tag=12
+style cave    floor=0 ceil=128 light=160 ftex=ROCKFLR ctex=CEILLITE wall=LAVAWALL
+style ycframe from=frame upper=ROCK2 wall=ROCK2
+style secdoor from=door upper=ROCK2 wall=ROCK2 door=door_stay
+style secret  floor=0 ceil=128 light=128 ftex=MARBFLR ctex=CEIL2 wall=MARBLE1 special=secret
+
+# ---- the plateau
+rect plateau 0 0 1536 1280
+ngon lava    1120 300 96 10
+ngon rise    300 800 120 7
+ngon void    300 800 40 5
+ngon void    1300 700 56 6
+ngon void    560 1100 44 7
+ngon void    1000 1150 36 5
+
+# ---- start bunker (south-west)
+rect void    48 48 336 336
+rect bunker  64 64 320 320
+rect door    320 160 336 224
+rect frame   336 144 368 240
+
+# ---- the relay tower (centre)
+rect void    576 448 960 832
+rect tower   592 464 944 816
+rect towerlt 688 560 848 720
+rect perch   816 640 944 816
+rect lift    752 704 816 768
+rect door    736 448 800 464
+rect tframe  720 416 816 448
+rect tdest   736 352 800 416
+
+# ---- north bunker: launcher and teleporter
+rect void    1136 960 1440 1216
+rect nbunk   1152 976 1424 1200
+rect pad     1360 1136 1408 1184
+rect door    1264 960 1328 976
+rect frame   1248 928 1344 960
+
+# ---- secret alcove behind a false cliff (north-west)
+rect secdoor -16 1152 0 1200
+rect secret  -144 1120 -16 1232
+line 0 1152 0 1200 flags=secret
+
+# ---- exit cave behind the yellow door (east cliff)
+rect ydoor   1536 576 1552 640
+rect ycframe 1504 560 1536 656
+rect cave    1552 544 1760 672
+switch 1760 576 1760 640 special=s1_exit tex=EXITSW0
+
+# ---- things
+thing player1      128 192 0
+thing clip         280 100
+thing stimpack     280 290
+thing lamp         96 96
+thing lamp         96 288
+
+thing fiend        520 260 180
+thing fiend        900 140 180
+thing fiend        1250 420 180 normal hard
+thing drone        700 300 270
+thing drone        460 640 0
+thing drone        1400 300 180 hard
+thing heavy        1050 560 180 normal hard
+thing enforcer     200 1000 270
+thing enforcer     1450 1060 270 hard
+thing gazer        800 1000 270
+thing ripper       300 1180 270 normal hard
+thing barrel       980 240
+thing barrel       1010 230
+thing barrel       1240 300
+thing shells       420 500
+thing ammo_box     1480 120
+thing medkit       40 640
+thing health_bonus 300 760
+thing health_bonus 300 840
+thing torch        1060 380
+thing torch        1180 380
+
+thing teleport_dest 768 384 90
+thing heavy        700 520 90
+thing drone        880 520 90 normal hard
+thing gazer        770 640 270 hard
+thing key_yellow   880 728
+thing armor_green  650 780
+thing rocket_box   900 780 0 easy
+
+thing launcher     1300 1100 270
+thing rockets      1200 1020
+thing rockets      1240 1020
+thing heavy        1380 1020 180
+thing fiend        1180 1160 0 ambush
+thing medkit       1400 1000
+
+thing vital_orb    -80 1176
+thing rocket_box   -120 1140
+
+thing heavy        1640 640 180 ambush normal hard
+thing fiend        1700 580 180 ambush
+thing health_bonus 1600 600
+thing lamp         1580 560
+thing lamp         1580 656
