@@ -18,6 +18,15 @@ pub struct RECT {
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
+pub struct MONITORINFO {
+    pub cbSize: u32,
+    pub rcMonitor: RECT,
+    pub rcWork: RECT,
+    pub dwFlags: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
 pub struct POINT {
     pub x: i32,
     pub y: i32,
@@ -184,6 +193,8 @@ dll!("user32" {
     pub fn SetWindowPos(h: HWND, after: HWND, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> BOOL;
     pub fn GetSystemMetrics(i: i32) -> i32;
     pub fn GetForegroundWindow() -> HWND;
+    pub fn MonitorFromWindow(h: HWND, flags: u32) -> HANDLE;
+    pub fn GetMonitorInfoW(m: HANDLE, info: *mut MONITORINFO) -> BOOL;
 });
 
 dll!("gdi32" {

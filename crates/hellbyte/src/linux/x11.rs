@@ -62,8 +62,12 @@ static mut XS: X = X {
     inlen: 0,
 };
 
-// Row buffer for image upload: up to 1920 pixels * 4 bytes.
-static mut ROW: [u8; 1920 * 4] = [0; 1920 * 4];
+/// Widest row the software scaler draws (the RENDER path only needs 320).
+const ROW_PIXELS: usize = 1920;
+// Row buffer for image upload.
+static mut ROW: [u8; ROW_PIXELS * 4] = [0; ROW_PIXELS * 4];
+// Large replies: the connection setup and RENDER's format list.
+static mut SCRATCH: [u8; 16384] = [0; 16384];
 
 fn ne16(v: u16) -> [u8; 2] {
     v.to_ne_bytes()
@@ -188,6 +192,23 @@ impl X {
         match self.reply(&mut r, ev) {
             Some(_) => rd32(&r, 8),
             None => 0,
+        }
+    }
+
+    /// Major opcode of an extension, or 0 if the server doesn't have it.
+    fn query_extension(&mut self, name: &[u8], ev: &mut EventQueue) -> u8 {
+        self.p8(98);
+        self.p8(0);
+        self.p16(((8 + name.len() + 3) / 4) as u16);
+        self.p16(name.len() as u16);
+        self.p16(0);
+        self.put(name);
+        self.pad(name.len());
+        self.flush();
+        let mut r = [0u8; 32];
+        match self.reply(&mut r, ev) {
+            Some(_) if r[8] != 0 => r[9],
+            _ => 0,
         }
     }
 
@@ -447,9 +468,8 @@ fn setup(env: &Env, x: &mut X) -> Result<(), &'static [u8]> {
         return Err(b"X server refused the connection (authorization?)");
     }
     // The setup data can be large on servers with many visuals; parse as it streams.
-    static mut SETUP: [u8; 16384] = [0; 16384];
     // SAFETY: single-threaded, used only during setup.
-    let s = unsafe { &mut *core::ptr::addr_of_mut!(SETUP) };
+    let s = unsafe { &mut *core::ptr::addr_of_mut!(SCRATCH) };
     let keep = extra.min(s.len());
     if !x.read_exact(&mut s[..keep]) {
         return Err(b"short X setup reply");
@@ -518,12 +538,209 @@ fn shift_of(mask: u32) -> (u32, u32) {
     (shift, bits)
 }
 
+/// Ask XKB to report a held key as repeated presses without the fake
+/// releases in between, so holding a key doesn't look like tapping it.
+fn detectable_autorepeat(x: &mut X, ev: &mut EventQueue) {
+    let op = x.query_extension(b"XKEYBOARD", ev);
+    if op == 0 {
+        return;
+    }
+    x.p8(op); // UseExtension 1.0
+    x.p8(0);
+    x.p16(2);
+    x.p16(1);
+    x.p16(0);
+    x.flush();
+    let mut r = [0u8; 32];
+    if x.reply(&mut r, ev).is_none() || r[1] == 0 {
+        return;
+    }
+    x.p8(op); // PerClientFlags: DetectableAutoRepeat on the core keyboard
+    x.p8(21);
+    x.p16(7);
+    x.p16(0x100);
+    x.p16(0);
+    for v in [1, 1, 0, 0, 0] {
+        x.p32(v);
+    }
+    x.flush();
+    x.reply(&mut r, ev);
+}
+
+/// Server-side scaling with the RENDER extension: each frame goes into a
+/// pixmap at the game's own resolution and the X server stretches it into the
+/// window (often on the GPU), instead of the client sending every window pixel.
+struct Render {
+    op: u8,
+    pixmap: u32,
+    src: u32,
+    dst: u32,
+    /// Window area the scaling transform is set up for.
+    size: (usize, usize),
+}
+
+/// The RENDER picture format of `visual`, from a QueryPictFormats reply.
+fn visual_format(r: &[u8], visual: u32) -> Option<u32> {
+    let (nformats, nscreens) = (rd32(r.get(..32)?, 8) as usize, rd32(r, 12) as usize);
+    let mut p = 32 + nformats * 28;
+    for _ in 0..nscreens {
+        let ndepths = rd32(r.get(p..p + 8)?, 0) as usize;
+        p += 8;
+        for _ in 0..ndepths {
+            let nvisuals = rd16(r.get(p..p + 8)?, 2) as usize;
+            p += 8;
+            for _ in 0..nvisuals {
+                let v = r.get(p..p + 8)?;
+                if rd32(v, 0) == visual {
+                    return Some(rd32(v, 4));
+                }
+                p += 8;
+            }
+        }
+    }
+    None
+}
+
+fn setup_render(x: &mut X, win: u32, sw: usize, sh: usize, ev: &mut EventQueue) -> Option<Render> {
+    let op = x.query_extension(b"RENDER", ev);
+    if op == 0 {
+        return None;
+    }
+    x.p8(op); // QueryVersion 0.11
+    x.p8(0);
+    x.p16(3);
+    x.p32(0);
+    x.p32(11);
+    x.flush();
+    let mut r = [0u8; 32];
+    x.reply(&mut r, ev)?;
+    if rd32(&r, 8) == 0 && rd32(&r, 12) < 6 {
+        return None; // transforms and filters arrived in 0.6
+    }
+    x.p8(op); // QueryPictFormats
+    x.p8(1);
+    x.p16(1);
+    x.flush();
+    // SAFETY: single-threaded scratch buffer, free after setup.
+    let s = unsafe { &mut *core::ptr::addr_of_mut!(SCRATCH) };
+    let n = x.reply(s, ev)?;
+    let format = visual_format(&s[..n], x.visual)?;
+    let rn = Render { op, pixmap: x.id(), src: x.id(), dst: x.id(), size: (0, 0) };
+    x.p8(53); // CreatePixmap
+    x.p8(x.depth);
+    x.p16(4);
+    x.p32(rn.pixmap);
+    x.p32(win);
+    x.p16(sw as u16);
+    x.p16(sh as u16);
+    for (picture, drawable) in [(rn.src, rn.pixmap), (rn.dst, win)] {
+        x.p8(op); // CreatePicture
+        x.p8(4);
+        x.p16(5);
+        x.p32(picture);
+        x.p32(drawable);
+        x.p32(format);
+        x.p32(0);
+    }
+    let filter = b"nearest"; // keep the pixels crisp
+    x.p8(op); // SetPictureFilter
+    x.p8(30);
+    x.p16((3 + (filter.len() + 3) / 4) as u16);
+    x.p32(rn.src);
+    x.p16(filter.len() as u16);
+    x.p16(0);
+    x.put(filter);
+    x.pad(filter.len());
+    // Round trip: an error in any of the above arrives before this reply.
+    x.p8(43); // GetInputFocus
+    x.p8(0);
+    x.p16(1);
+    x.flush();
+    x.reply(&mut r, ev)?;
+    Some(rn)
+}
+
+/// Ask the window manager to switch the window in or out of fullscreen.
+fn toggle_fullscreen(x: &mut X, win: u32, net_state: u32, net_full: u32) {
+    x.p8(25); // SendEvent to the root window
+    x.p8(0);
+    x.p16(11);
+    x.p32(x.root);
+    x.p32(0x18_0000); // SubstructureNotify | SubstructureRedirect
+    x.p8(33); // ClientMessage _NET_WM_STATE: toggle fullscreen
+    x.p8(32);
+    x.p16(0);
+    x.p32(win);
+    x.p32(net_state);
+    for v in [2, net_full, 0, 1, 0] {
+        x.p32(v);
+    }
+}
+
+/// Paint part of the window with its (black) background.
+fn clear_area(x: &mut X, win: u32, left: usize, top: usize, w: usize, h: usize) {
+    if w > 0 && h > 0 {
+        x.p8(61);
+        x.p8(0);
+        x.p16(4);
+        x.p32(win);
+        x.p16(left as u16);
+        x.p16(top as u16);
+        x.p16(w as u16);
+        x.p16(h as u16);
+    }
+}
+
+/// Store one pixel in the server's format.
+fn store(row: &mut [u8], o: usize, c: u32, bytespp: usize, lsb: bool) {
+    match bytespp {
+        4 => row[o..o + 4].copy_from_slice(&if lsb { c.to_le_bytes() } else { c.to_be_bytes() }),
+        2 => row[o..o + 2].copy_from_slice(&if lsb { (c as u16).to_le_bytes() } else { (c as u16).to_be_bytes() }),
+        _ => {
+            let b = if lsb { c.to_le_bytes() } else { c.to_be_bytes() };
+            let first = if lsb { 0 } else { 4 - bytespp };
+            row[o..o + bytespp].copy_from_slice(&b[first..first + bytespp]);
+        }
+    }
+}
+
+/// PutImage of a `w` x `h` ZPixmap at (`left`, `top`), rows made by `fill`.
+fn put_image(x: &mut X, drawable: u32, gc: u32, left: usize, top: usize, w: usize, h: usize, mut fill: impl FnMut(usize, &mut [u8])) {
+    let row_bytes = (w * (x.bpp as usize / 8).max(1) + 3) & !3;
+    let rows_per_req = ((x.max_req_bytes - 24) / row_bytes).clamp(1, 512);
+    // SAFETY: single-threaded scratch row.
+    let row = unsafe { &mut *core::ptr::addr_of_mut!(ROW) };
+    let mut y = 0;
+    while y < h {
+        let n = rows_per_req.min(h - y);
+        x.p8(72); // PutImage, ZPixmap
+        x.p8(2);
+        x.p16(((24 + row_bytes * n) / 4) as u16);
+        x.p32(drawable);
+        x.p32(gc);
+        x.p16(w as u16);
+        x.p16(n as u16);
+        x.p16(left as u16);
+        x.p16((top + y) as u16);
+        x.p8(0);
+        x.p8(x.depth);
+        x.p16(0);
+        x.flush();
+        for r in 0..n {
+            fill(y + r, &mut row[..row_bytes]);
+            write_all(x.fd, &row[..row_bytes]);
+        }
+        y += n;
+    }
+}
+
 pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Result<i32, &'static [u8]> {
     // SAFETY: single-threaded; the X state is used only here.
     let x = unsafe { &mut *core::ptr::addr_of_mut!(XS) };
     setup(env, x)?;
     let mut ev = EventQueue { q: [[0; 32]; 16], n: 0 };
     x.load_keymap(&mut ev);
+    detectable_autorepeat(x, &mut ev);
     let wm_protocols = x.intern(b"WM_PROTOCOLS", &mut ev);
     let wm_delete = x.intern(b"WM_DELETE_WINDOW", &mut ev);
     let net_wm_name = x.intern(b"_NET_WM_NAME", &mut ev);
@@ -599,6 +816,10 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
     if let Some(m) = args.map {
         e.new_game(hellbyte_engine::game::Skill::from_u8(args.skill), m as usize);
     }
+    let mut render = {
+        let (_, sw, sh) = e.screen();
+        setup_render(x, win, sw, sh, &mut ev)
+    };
 
     let (rs, rb) = shift_of(x.rmask);
     let (gs, gb) = shift_of(x.gmask);
@@ -609,6 +830,7 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
     let mut pal32 = [0u32; 256];
     let mut pal_hash = 0u32;
     let bytespp = (x.bpp as usize / 8).max(1);
+    let lsb = x.lsb_first;
 
     let tic_us: u64 = 1_000_000 / 35;
     let mut next_tic = now_us();
@@ -616,21 +838,72 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
     let mut focused = true;
     let mut dirty = true;
     let mut quit = false;
+    let mut keys_down = [false; 256];
     let (mut cx, mut cy) = ((ww / 2) as i32, (wh / 2) as i32);
     while !quit && !e.quit_requested() {
-        // ---- events
-        let avail = bytes_available(x.fd);
-        let mut process = |x: &mut X, ev: &[u8; 32], e: &mut Engine| -> bool {
-            match ev[0] & 0x7f {
+        // ---- events: read what has arrived, then handle it in order
+        let mut batch = [[0u8; 32]; 64];
+        let mut nb = 0;
+        for q in &ev.q[..ev.n] {
+            batch[nb] = *q;
+            nb += 1;
+        }
+        ev.n = 0;
+        let mut remaining = bytes_available(x.fd);
+        while remaining >= 32 && nb < batch.len() {
+            let mut evb = [0u8; 32];
+            if !x.read_exact(&mut evb) {
+                quit = true;
+                break;
+            }
+            remaining -= 32;
+            if evb[0] == 1 {
+                // stray reply: skip its payload
+                let extra = rd32(&evb, 4) as usize * 4;
+                let mut tmp = [0u8; 256];
+                let mut left = extra;
+                while left > 0 {
+                    let k = left.min(256);
+                    x.read_exact(&mut tmp[..k]);
+                    left -= k;
+                }
+                remaining = remaining.saturating_sub(extra);
+                continue;
+            }
+            if evb[0] != 0 {
+                batch[nb] = evb;
+                nb += 1;
+            }
+        }
+        let mut fullscreen = false;
+        for i in 0..nb {
+            let evb = &batch[i];
+            match evb[0] & 0x7f {
                 2 | 3 => {
-                    let k = x.keymap[ev[1] as usize];
-                    if k != 0 {
-                        e.key(k, ev[0] & 0x7f == 2);
+                    let kc = evb[1] as usize;
+                    let down = evb[0] & 0x7f == 2;
+                    // Without XKB's detectable auto-repeat a held key sends a release
+                    // and a press with the same time stamp: ignore that release.
+                    if !down
+                        && batch[..nb].get(i + 1).is_some_and(|n| n[0] & 0x7f == 2 && n[1] == evb[1] && rd32(n, 4) == rd32(evb, 4))
+                    {
+                        continue;
+                    }
+                    let k = x.keymap[kc];
+                    if down && k == KEY_ENTER && rd16(evb, 28) & 0x8 != 0 {
+                        fullscreen = true; // Alt+Enter
+                        continue;
+                    }
+                    // Auto-repeat only matters in menus; in play it would re-press keys.
+                    let repeat = down && keys_down[kc];
+                    keys_down[kc] = down;
+                    if k != 0 && !(repeat && !e.menu.active) {
+                        e.key(k, down);
                     }
                 }
                 4 | 5 => {
-                    let down = ev[0] & 0x7f == 4;
-                    match ev[1] {
+                    let down = evb[0] & 0x7f == 4;
+                    match evb[1] {
                         1 => e.mouse_button(0, down),
                         2 => e.mouse_button(2, down),
                         3 => e.mouse_button(1, down),
@@ -640,8 +913,8 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
                     }
                 }
                 6 => {
-                    let mx = rd16(ev, 24) as i16 as i32;
-                    let my = rd16(ev, 26) as i16 as i32;
+                    let mx = rd16(evb, 24) as i16 as i32;
+                    let my = rd16(evb, 26) as i16 as i32;
                     if grabbed && (mx != cx || my != cy) {
                         e.mouse_motion((mx - cx) * 2, my - cy);
                         // WarpPointer back to the centre.
@@ -657,62 +930,31 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
                         x.p16(cy as u16);
                     }
                 }
-                9 => {
-                    focused = true;
-                }
+                9 => focused = true,
                 10 => {
                     focused = false;
+                    keys_down = [false; 256];
                     e.release_all();
                 }
                 12 => dirty = true,
                 22 => {
-                    ww = rd16(ev, 20) as usize;
-                    wh = rd16(ev, 22) as usize;
+                    ww = rd16(evb, 20) as usize;
+                    wh = rd16(evb, 22) as usize;
                     cx = (ww / 2) as i32;
                     cy = (wh / 2) as i32;
                     dirty = true;
                 }
                 33 => {
-                    if rd32(ev, 8) == wm_protocols || rd32(ev, 12) == wm_delete {
-                        return true;
+                    if rd32(evb, 8) == wm_protocols && rd32(evb, 12) == wm_delete {
+                        quit = true;
                     }
                 }
                 34 => x.load_keymap(&mut EventQueue { q: [[0; 32]; 16], n: 0 }),
                 _ => {}
             }
-            false
-        };
-        for i in 0..ev.n {
-            let q = ev.q[i];
-            quit |= process(x, &q, e);
         }
-        ev.n = 0;
-        if avail > 0 {
-            let mut remaining = avail;
-            while remaining >= 32 {
-                let mut evb = [0u8; 32];
-                if !x.read_exact(&mut evb) {
-                    quit = true;
-                    break;
-                }
-                remaining -= 32;
-                if evb[0] == 1 {
-                    // stray reply: skip its payload
-                    let extra = rd32(&evb, 4) as usize * 4;
-                    let mut tmp = [0u8; 256];
-                    let mut left = extra;
-                    while left > 0 {
-                        let k = left.min(256);
-                        x.read_exact(&mut tmp[..k]);
-                        left -= k;
-                    }
-                    remaining = remaining.saturating_sub(extra);
-                    continue;
-                }
-                if evb[0] != 0 {
-                    quit |= process(x, &evb, e);
-                }
-            }
+        if fullscreen {
+            toggle_fullscreen(x, win, net_state, net_full);
         }
         // ---- pointer grab follows the game state
         let want = e.wants_pointer() && focused && !args.nomouse;
@@ -759,9 +1001,8 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
             next_tic = now;
         }
 
-        // ---- draw: scale 320x200 to the window at 4:3 with letterboxing
+        // ---- draw: the 320x200 frame shown at 4:3, centred, black bars around it
         if steps > 0 || dirty {
-            dirty = false;
             e.draw();
             let pal = e.palette();
             let mut h = 0x811c_9dc5u32;
@@ -775,50 +1016,58 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
                 }
             }
             let (px, sw, sh) = e.screen();
-            let (dw, dh) = if ww * 3 > wh * 4 { (wh * 4 / 3, wh) } else { (ww, ww * 3 / 4) };
-            let dw = dw.clamp(1, 1920);
-            let dh = dh.max(1);
-            let ox = (ww.saturating_sub(dw)) / 2;
-            let oy = (wh.saturating_sub(dh)) / 2;
-            let row_bytes = (dw * bytespp + 3) & !3;
-            let rows_per_req = ((x.max_req_bytes - 24) / row_bytes).clamp(1, 512);
-            // SAFETY: single-threaded scratch row.
-            let row = unsafe { &mut *core::ptr::addr_of_mut!(ROW) };
-            let mut y = 0;
-            while y < dh {
-                let n = rows_per_req.min(dh - y);
-                x.p8(72); // PutImage, ZPixmap
-                x.p8(2);
-                x.p16(((24 + row_bytes * n) / 4) as u16);
-                x.p32(win);
-                x.p32(gc);
-                x.p16(dw as u16);
-                x.p16(n as u16);
-                x.p16(ox as u16);
-                x.p16((oy + y) as u16);
-                x.p8(0);
-                x.p8(x.depth);
-                x.p16(0);
-                x.flush();
-                for r in 0..n {
-                    let sy = ((y + r) * sh / dh).min(sh - 1);
-                    let src = &px[sy * sw..sy * sw + sw];
-                    for dx in 0..dw {
-                        let c = pal32[src[dx * sw / dw] as usize];
-                        let o = dx * bytespp;
-                        let bytes = if x.lsb_first { c.to_le_bytes() } else { c.to_be_bytes() };
-                        if bytespp == 4 {
-                            row[o..o + 4].copy_from_slice(&bytes);
-                        } else if bytespp == 2 {
-                            let v = if x.lsb_first { (c as u16).to_le_bytes() } else { (c as u16).to_be_bytes() };
-                            row[o..o + 2].copy_from_slice(&v);
-                        } else {
-                            row[o..o + bytespp].copy_from_slice(&bytes[..bytespp]);
+            let (mut dw, mut dh) = if ww * 3 > wh * 4 { (wh * 4 / 3, wh) } else { (ww, ww * 3 / 4) };
+            if render.is_none() && dw > ROW_PIXELS {
+                // The software scaler works a row at a time: cap the size, keep the shape.
+                dh = dh * ROW_PIXELS / dw;
+                dw = ROW_PIXELS;
+            }
+            let (dw, dh) = (dw.max(1), dh.max(1));
+            let (ox, oy) = (ww.saturating_sub(dw) / 2, wh.saturating_sub(dh) / 2);
+            if dirty {
+                // Resized or uncovered: repaint the bars around the picture.
+                dirty = false;
+                clear_area(x, win, 0, 0, ox, wh);
+                clear_area(x, win, ox + dw, 0, ww.saturating_sub(ox + dw), wh);
+                clear_area(x, win, ox, 0, dw, oy);
+                clear_area(x, win, ox, oy + dh, dw, wh.saturating_sub(oy + dh));
+            }
+            match render.as_mut() {
+                Some(r) => {
+                    // Send the frame at its own size; the server scales it.
+                    put_image(x, r.pixmap, gc, 0, 0, sw, sh, |y, row| {
+                        for (i, &p) in px[y * sw..(y + 1) * sw].iter().enumerate() {
+                            store(row, i * bytespp, pal32[p as usize], bytespp, lsb);
+                        }
+                    });
+                    if r.size != (dw, dh) {
+                        r.size = (dw, dh);
+                        x.p8(r.op); // SetPictureTransform: window pixel -> frame pixel
+                        x.p8(28);
+                        x.p16(11);
+                        x.p32(r.src);
+                        for v in [(sw << 16) / dw, 0, 0, 0, (sh << 16) / dh, 0, 0, 0, 1 << 16] {
+                            x.p32(v as u32);
                         }
                     }
-                    write_all(x.fd, &row[..row_bytes]);
+                    x.p8(r.op); // Composite (Src) into the window
+                    x.p8(8);
+                    x.p16(9);
+                    x.p8(1);
+                    x.put(&[0, 0, 0]);
+                    x.p32(r.src);
+                    x.p32(0);
+                    x.p32(r.dst);
+                    for v in [0, 0, 0, 0, ox, oy, dw, dh] {
+                        x.p16(v as u16);
+                    }
                 }
-                y += n;
+                None => put_image(x, win, gc, ox, oy, dw, dh, |y, row| {
+                    let src = &px[(y * sh / dh).min(sh - 1) * sw..][..sw];
+                    for dx in 0..dw {
+                        store(row, dx * bytespp, pal32[src[dx * sw / dw] as usize], bytespp, lsb);
+                    }
+                }),
             }
             x.flush();
         }

@@ -29,6 +29,10 @@ const WM_MOUSEWHEEL: u32 = 0x020a;
 const WS_OVERLAPPEDWINDOW: u32 = 0x00cf_0000;
 const WS_POPUP: u32 = 0x8000_0000;
 const WS_VISIBLE: u32 = 0x1000_0000;
+const GWL_STYLE: i32 = -16;
+const SWP_NOZORDER: u32 = 0x0004;
+const SWP_FRAMECHANGED: u32 = 0x0020;
+const VK_RETURN: usize = 0x0d;
 
 struct State {
     engine: *mut Engine,
@@ -38,9 +42,23 @@ struct State {
     dirty: bool,
     w: i32,
     h: i32,
+    /// Borderless window covering the monitor.
+    full: bool,
+    /// Where the normal window goes when leaving fullscreen.
+    windowed: RECT,
 }
 
-static mut ST: State = State { engine: core::ptr::null_mut(), quit: false, grabbed: false, focused: true, dirty: true, w: 960, h: 720 };
+static mut ST: State = State {
+    engine: core::ptr::null_mut(),
+    quit: false,
+    grabbed: false,
+    focused: true,
+    dirty: true,
+    w: 960,
+    h: 720,
+    full: false,
+    windowed: RECT { left: 0, top: 0, right: 0, bottom: 0 },
+};
 static mut BMI: BITMAPINFO256 = BITMAPINFO256 {
     biSize: 40,
     biWidth: 320,
@@ -64,6 +82,33 @@ fn st() -> &'static mut State {
 fn engine() -> Option<&'static mut Engine> {
     let p = st().engine;
     if p.is_null() { None } else { Some(unsafe { &mut *p }) }
+}
+
+/// Alt+Enter: switch between the normal window and a borderless window
+/// covering the monitor it is on.
+fn toggle_fullscreen(hwnd: HWND) {
+    let s = st();
+    // SAFETY: plain Win32 calls on our own window.
+    unsafe {
+        let r = if s.full {
+            SetWindowLongW(hwnd, GWL_STYLE, (WS_OVERLAPPEDWINDOW | WS_VISIBLE) as i32);
+            s.windowed
+        } else {
+            GetWindowRect(hwnd, &mut s.windowed);
+            let mut mi = MONITORINFO { cbSize: core::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+            GetMonitorInfoW(MonitorFromWindow(hwnd, 2), &mut mi); // nearest monitor
+            SetWindowLongW(hwnd, GWL_STYLE, (WS_POPUP | WS_VISIBLE) as i32);
+            mi.rcMonitor
+        };
+        SetWindowPos(hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_FRAMECHANGED);
+        s.full = !s.full;
+        if s.grabbed {
+            let mut w = RECT::default();
+            GetWindowRect(hwnd, &mut w);
+            ClipCursor(&w);
+        }
+    }
+    s.dirty = true;
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: usize, lp: isize) -> isize {
@@ -101,6 +146,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: usize, lp: isize) ->
                 }
                 return 1;
             }
+        }
+        WM_SYSKEYDOWN if wp == VK_RETURN && (lp & (1 << 29)) != 0 => {
+            if (lp & (1 << 30)) == 0 {
+                toggle_fullscreen(hwnd); // Alt+Enter (not its auto-repeat)
+            }
+            return 0;
         }
         WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP => {
             let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
@@ -181,12 +232,17 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, args: &Args) -> i32 {
             fatal(b"Could not register the window class.");
         }
         let scale = if args.scale > 0 { args.scale as i32 } else { 3 };
+        let mut r = RECT { left: 0, top: 0, right: 320 * scale, bottom: 240 * scale };
+        AdjustWindowRect(&mut r, WS_OVERLAPPEDWINDOW, 0);
+        let (ww, wh) = (r.right - r.left, r.bottom - r.top);
+        let (sw, sh) = (GetSystemMetrics(0), GetSystemMetrics(1));
         let (style, x, y, w, h) = if args.fullscreen {
-            (WS_POPUP | WS_VISIBLE, 0, 0, GetSystemMetrics(0), GetSystemMetrics(1))
+            // Alt+Enter later brings back a normal window in the middle of the screen.
+            s.full = true;
+            s.windowed = RECT { left: (sw - ww) / 2, top: (sh - wh) / 2, right: (sw + ww) / 2, bottom: (sh + wh) / 2 };
+            (WS_POPUP | WS_VISIBLE, 0, 0, sw, sh)
         } else {
-            let mut r = RECT { left: 0, top: 0, right: 320 * scale, bottom: 240 * scale };
-            AdjustWindowRect(&mut r, WS_OVERLAPPEDWINDOW, 0);
-            (WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0x8000_0000u32 as i32, 0x8000_0000u32 as i32, r.right - r.left, r.bottom - r.top)
+            (WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0x8000_0000u32 as i32, 0x8000_0000u32 as i32, ww, wh)
         };
         let hwnd = CreateWindowExW(0, cls, wide(b"Hellbyte", &mut title).as_ptr(), style, x, y, w, h, 0, 0, inst, core::ptr::null());
         if hwnd == 0 {

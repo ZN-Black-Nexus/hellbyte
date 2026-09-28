@@ -86,7 +86,7 @@ hellbyte               # window on desktops; framebuffer on consoles; terminal o
 hellbyte --term        # force the terminal renderer (works over SSH / serial)
 hellbyte --fb          # Linux framebuffer + evdev (needs the video/input groups)
 hellbyte --map 3       # jump to a level        --skill 1..5
-hellbyte --scale 4     # window size multiplier  --fullscreen
+hellbyte --scale 4     # starting window size  --fullscreen
 hellbyte --help
 ```
 
@@ -101,6 +101,7 @@ hellbyte --help
 | Automap | Tab (`+` `-` zoom) |
 | Menu / save / load | Esc, F2 / F3, quick save F6 / quick load F9 |
 | Pause | `P` |
+| Fullscreen | Alt+Enter (Option+Enter on macOS); windows can also be resized or maximized |
 
 Saves live in `~/.local/share/hellbyte` (Linux), `%APPDATA%\Hellbyte`
 (Windows) or `~/Library/Application Support/Hellbyte` (macOS).

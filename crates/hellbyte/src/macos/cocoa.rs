@@ -237,6 +237,8 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, args: &Args) -> Result<i32, &'st
         if !rt.gravity_aspect.is_null() {
             rt.send_id(layer, b"setContentsGravity:\0", rt.gravity_aspect);
         }
+        // Black bars around the 4:3 picture when the window has another shape.
+        rt.send_id(win, b"setBackgroundColor:\0", rt.send(rt.cls(b"NSColor\0"), b"blackColor\0"));
         rt.send_bool(app, b"activateIgnoringOtherApps:\0", true);
         rt.send(app, b"finishLaunching\0");
         (rt.pool_pop)(pool);
@@ -273,7 +275,12 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, args: &Args) -> Result<i32, &'st
                             forward = false;
                             let repeat = ty == 10 && rt.get_bool(ev, b"isARepeat\0");
                             let k = keycode(rt.get_u16(ev, b"keyCode\0"));
-                            if k != 0 && !(repeat && !e.menu.active) {
+                            if k == KEY_ENTER && m & (1 << 19) != 0 {
+                                // Option+Enter: fullscreen on and off, like Alt+Enter elsewhere
+                                if ty == 10 && !repeat {
+                                    rt.send_id(win, b"toggleFullScreen:\0", core::ptr::null_mut());
+                                }
+                            } else if k != 0 && !(repeat && !e.menu.active) {
                                 e.key(k, ty == 10);
                             }
                         }
