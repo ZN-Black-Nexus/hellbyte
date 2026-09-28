@@ -52,8 +52,8 @@ rect frame   1056 432 1088 528
 
 # ---- pump hall (north)
 rect door    672 624 736 640
-rect pframe  656 640 752 672
 rect pump    448 640 960 1024
+rect pframe  656 640 752 672
 rect pumplit 592 752 816 912
 rect void    512 736 576 800
 rect void    832 736 896 800
@@ -67,8 +67,8 @@ line 448 800 448 864 flags=secret
 
 # ---- booth block (south)
 rect door    672 48 736 64
-rect sframe  656 16 752 48
 rect south   448 -320 960 48
+rect sframe  656 16 752 48
 rect southdk 448 -320 608 -96
 rect booth   752 -288 928 -96
 rect lift    688 -224 752 -160

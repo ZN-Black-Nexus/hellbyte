@@ -53,6 +53,8 @@ struct Style {
     tag: i32,
     /// Line special given to lines bordering this sector (doors).
     door: Option<String>,
+    /// Source line of the shape that created this sector (for errors).
+    line: usize,
 }
 
 impl Default for Style {
@@ -69,6 +71,7 @@ impl Default for Style {
             special: "none".into(),
             tag: 0,
             door: None,
+            line: 0,
         }
     }
 }
@@ -305,6 +308,7 @@ impl Parser {
                                 }
                             }
                         }
+                        st.line = ln;
                         Some(match name {
                             Some(n) => match self.sector_names.get(&n) {
                                 Some(&idx) => idx,
@@ -357,6 +361,7 @@ impl Parser {
                             }
                         }
                         st.floor = base.floor + step * (i + 1);
+                        st.line = ln;
                         self.sectors.push(st);
                         let poly: Vec<P> = poly.into_iter().map(|(x, y)| (x as f64, y as f64)).collect();
                         self.regions.push(Region { poly: make_ccw(poly), sector: Some(self.sectors.len() - 1) });
@@ -899,6 +904,14 @@ pub fn compile(src: &str, tex: &Textures) -> Result<CompiledLevel, String> {
                     l.special = o.door.clone().unwrap();
                     l.tag = o.tag;
                 }
+                // As in the classic format, the door is the line's back side and
+                // is used from the front, so turn lines whose door is in front.
+                if b.door.is_none() && f.door.is_some() {
+                    let front = l.front;
+                    l.front = l.back.unwrap();
+                    l.back = Some(front);
+                    core::mem::swap(&mut l.v1, &mut l.v2);
+                }
             }
         }
         for &x in &l.props {
@@ -1134,6 +1147,16 @@ pub fn compile(src: &str, tex: &Textures) -> Result<CompiledLevel, String> {
             if b != l.front {
                 sector_lines[b].push(i as u16);
             }
+        }
+    }
+
+    // A shape hidden under later shapes leaves a sector without lines.
+    for (si, ls) in sector_lines.iter().enumerate() {
+        if ls.is_empty() {
+            return Err(format!(
+                "{}: line {}: this shape is completely covered by shapes drawn after it (move it further down)",
+                p.ident, p.sectors[si].line
+            ));
         }
     }
 

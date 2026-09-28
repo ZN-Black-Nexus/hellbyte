@@ -332,9 +332,15 @@ impl Game {
         any
     }
 
+    /// A door worked by hand. The door is the line's back sector (the level
+    /// compiler turns door lines to face out of the door); as in the classic
+    /// games, players have to use them from the front, not from inside the door.
     fn ev_vertical_door(&mut self, line: usize, m: MRef, side: usize) {
         let special = self.lv.lines[line].special;
         let is_player = self.mobjs[m as usize].is_player;
+        if is_player && side != 0 {
+            return;
+        }
         let need = match special {
             LineSpecial::DoorRedRepeat | LineSpecial::DoorRedStay => Some((CARD_RED, "A red key opens this door.")),
             LineSpecial::DoorBlueRepeat | LineSpecial::DoorBlueStay => Some((CARD_BLUE, "A blue key opens this door.")),
@@ -352,7 +358,7 @@ impl Game {
                 return;
             }
         }
-        let Some(sec) = self.lv.side_sector(line, side ^ 1) else { return };
+        let Some(sec) = self.lv.back_sector(line) else { return };
         let active = self.lv.sectors[sec].mover;
         if active != 0 {
             let i = active as usize - 1;
@@ -1028,5 +1034,206 @@ impl Game {
                 self.lv.sides[side].xoff += FRACUNIT;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+    use super::*;
+    use std::sync::{Mutex, MutexGuard};
+    use std::{format, string::String, vec::Vec};
+
+    /// Tests share the one engine instance, so they take turns.
+    static ENGINE: Mutex<()> = Mutex::new(());
+
+    fn game() -> (MutexGuard<'static, ()>, &'static mut Game) {
+        let guard = ENGINE.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: the lock above makes this the only reference in use.
+        (guard, unsafe { &mut crate::instance().g })
+    }
+
+    fn manual_door(s: LineSpecial) -> bool {
+        matches!(
+            s,
+            LineSpecial::DoorRepeat
+                | LineSpecial::DoorRepeatFast
+                | LineSpecial::DoorStay
+                | LineSpecial::DoorRedRepeat
+                | LineSpecial::DoorBlueRepeat
+                | LineSpecial::DoorYellowRepeat
+                | LineSpecial::DoorRedStay
+                | LineSpecial::DoorBlueStay
+                | LineSpecial::DoorYellowStay
+        )
+    }
+
+    /// Unit vector from line `li` towards its front side, and the line's middle.
+    fn front_normal(g: &Game, li: usize) -> (f64, f64, Fixed, Fixed) {
+        let ld = &g.lv.map.lines[li];
+        let (a, b) = (g.lv.vert(ld.v1), g.lv.vert(ld.v2));
+        let (dx, dy) = (((b.x - a.x) >> 16) as f64, ((b.y - a.y) >> 16) as f64);
+        let len = (dx * dx + dy * dy).sqrt();
+        (dy / len, -dx / len, a.x + (b.x - a.x) / 2, a.y + (b.y - a.y) / 2)
+    }
+
+    fn at(v: f64) -> Fixed {
+        (v * 65536.0) as Fixed
+    }
+
+    /// Stand `dist` units in front of line `li`, face it and press use.
+    fn use_from_front(g: &mut Game, li: usize, dist: f64) -> bool {
+        let (nx, ny, mx, my) = front_normal(g, li);
+        let pm = g.player.mo;
+        if !g.teleport_move(pm, mx + at(nx * dist), my + at(ny * dist)) {
+            return false;
+        }
+        g.mo_mut(pm).angle = point_to_angle(at(-nx), at(-ny));
+        g.use_lines(pm);
+        true
+    }
+
+    /// Stand in front of every door and lift, press use through the real line
+    /// trace, and check that doors open far enough to walk through and lifts
+    /// go down and come back up.
+    #[test]
+    fn doors_and_lifts_work_when_used() {
+        let (_turn, g) = game();
+        let mut bad: Vec<String> = Vec::new();
+        let mut tested = 0;
+        for idx in 0..MAPS.len() {
+            g.setup_level(idx, true);
+            for li in 0..g.lv.map.lines.len() {
+                let ld = &g.lv.map.lines[li];
+                let (special, tag) = (ld.special, ld.tag);
+                let lift = special == LineSpecial::SrLift;
+                if !manual_door(special) && !lift {
+                    continue;
+                }
+                let v = g.lv.vert(ld.v1);
+                let name = format!("{} line {li} at ({}, {}) {special:?}", g.lv.map.name, v.x >> 16, v.y >> 16);
+                g.setup_level(idx, true);
+                let Some(back) = g.lv.back_sector(li) else {
+                    bad.push(format!("{name}: one-sided"));
+                    continue;
+                };
+                if !lift && g.lv.sectors[back].ceil > g.lv.sectors[back].floor {
+                    bad.push(format!("{name}: the door is not on the back side"));
+                    continue;
+                }
+                if lift && g.lv.sectors[back].tag != tag {
+                    continue; // the lift's far side: used from the lift itself
+                }
+                g.player.cards = [true; 3];
+                if !use_from_front(g, li, 24.0) {
+                    bad.push(format!("{name}: can't stand in front of it"));
+                    continue;
+                }
+                tested += 1;
+                let movers: Vec<usize> = (0..g.lv.map.sectors.len()).filter(|&s| g.lv.sectors[s].mover != 0).collect();
+                if movers.is_empty() {
+                    bad.push(format!("{name}: pressing use does nothing"));
+                    continue;
+                }
+                let start: Vec<(Fixed, Fixed)> = movers.iter().map(|&s| (g.lv.sectors[s].floor, g.lv.sectors[s].ceil)).collect();
+                let (mut top, mut low) = (start.clone(), start.clone());
+                for _ in 0..400 {
+                    g.update_specials();
+                    for (k, &s) in movers.iter().enumerate() {
+                        top[k].1 = top[k].1.max(g.lv.sectors[s].ceil);
+                        low[k].0 = low[k].0.min(g.lv.sectors[s].floor);
+                    }
+                }
+                for (k, &s) in movers.iter().enumerate() {
+                    let sec = &g.lv.sectors[s];
+                    if lift {
+                        if low[k].0 >= start[k].0 || sec.floor != start[k].0 {
+                            bad.push(format!(
+                                "{name}: lift sector {s} went from {} down to {} and ended at {}",
+                                start[k].0 >> 16,
+                                low[k].0 >> 16,
+                                sec.floor >> 16
+                            ));
+                        }
+                    } else if s != back {
+                        bad.push(format!("{name}: moved sector {s}, which is not the door"));
+                    } else if (top[k].1 - sec.floor) >> 16 < 56 {
+                        bad.push(format!("{name}: opens only {} units", (top[k].1 - sec.floor) >> 16));
+                    }
+                }
+            }
+        }
+        assert!(tested > 20, "only {tested} doors/lifts tested");
+        assert!(bad.is_empty(), "{tested} tested; problems:\n{}", bad.join("\n"));
+    }
+
+    /// Pressing use while standing in an open doorway must not turn the room
+    /// on either side into a door.
+    #[test]
+    fn using_a_door_from_inside_moves_nothing_else() {
+        let (_turn, g) = game();
+        let mut bad: Vec<String> = Vec::new();
+        let mut tested = 0;
+        for idx in 0..MAPS.len() {
+            g.setup_level(idx, true);
+            for li in 0..g.lv.map.lines.len() {
+                if !matches!(g.lv.map.lines[li].special, LineSpecial::DoorRepeat | LineSpecial::DoorRepeatFast) {
+                    continue;
+                }
+                let Some(door) = g.lv.back_sector(li) else { continue };
+                g.setup_level(idx, true);
+                if !use_from_front(g, li, 24.0) {
+                    continue;
+                }
+                for _ in 0..90 {
+                    g.update_specials(); // fully open, not closing yet
+                }
+                // 8 units behind the line is inside the door (doors are 16 deep).
+                let (nx, ny, mx, my) = front_normal(g, li);
+                let (ix, iy) = (mx - at(nx * 8.0), my - at(ny * 8.0));
+                let pm = g.player.mo;
+                if g.lv.sector_at(ix, iy) != door || !g.teleport_move(pm, ix, iy) {
+                    continue;
+                }
+                tested += 1;
+                for k in 0..4u32 {
+                    let before: Vec<(Fixed, Fixed)> =
+                        (0..g.lv.map.sectors.len()).map(|s| (g.lv.sectors[s].floor, g.lv.sectors[s].ceil)).collect();
+                    g.mo_mut(pm).angle = ANG90.wrapping_mul(k);
+                    g.use_lines(pm);
+                    for _ in 0..8 {
+                        g.update_specials();
+                    }
+                    for s in 0..g.lv.map.sectors.len() {
+                        if s != door && (g.lv.sectors[s].floor, g.lv.sectors[s].ceil) != before[s] {
+                            bad.push(format!("{} line {li}: using the door from inside it moved sector {s}", g.lv.map.name));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(tested > 10, "only {tested} doorways tested");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Nothing may start inside a closed door, where it would be stuck and jam it.
+    #[test]
+    fn nothing_starts_inside_a_closed_door() {
+        let mut bad: Vec<String> = Vec::new();
+        for m in MAPS {
+            for t in m.things {
+                let (x, y) = (fx(t.x as i32), fx(t.y as i32));
+                let mut n = m.root;
+                while n & NF_SUBSECTOR == 0 {
+                    let node = &m.nodes[n as usize];
+                    n = node.child[crate::level::point_on_node_side(x, y, node)];
+                }
+                let sec = m.subsectors[(n & !NF_SUBSECTOR) as usize].sector as usize;
+                if m.sectors[sec].ceil <= m.sectors[sec].floor {
+                    bad.push(format!("{}: thing at ({}, {}) starts inside closed sector {sec}", m.name, t.x, t.y));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }

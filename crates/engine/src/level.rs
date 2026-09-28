@@ -125,6 +125,10 @@ impl Level {
                     r = r.max(p.x);
                 }
             }
+            if t < b {
+                self.sectors[si].blockbox = [-1, 0, 0, -1]; // no lines: an empty box
+                continue;
+            }
             let bm = &map.blockmap;
             let cell = |v: Fixed, o: i32| ((v - fx(o)) >> (FRACBITS + 7)) as i16;
             self.sectors[si].blockbox = [cell(t, bm.y), cell(b, bm.y), cell(l, bm.x), cell(r, bm.x)];
@@ -400,3 +404,4 @@ pub fn point_on_side(x: Fixed, y: Fixed, lx: Fixed, ly: Fixed, ldx: Fixed, ldy: 
 pub fn point_on_node_side(x: Fixed, y: Fixed, n: &Node) -> usize {
     point_on_side(x, y, n.x, n.y, n.dx, n.dy)
 }
+
