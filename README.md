@@ -47,6 +47,12 @@ Tower**, **Deep Storage** and **The Breach**.
 | Windows | x86_64, x86 (32-bit, subsystem 5.01 so it also starts on very old Windows), ARM64 — native Win32 `.exe`, no C runtime |
 | macOS | one universal binary (Apple Silicon + Intel), links only `libSystem` |
 
+The Linux binaries don't depend on the distribution. `linux-x86_64` runs on
+any 64-bit PC Linux (Debian/Ubuntu amd64, Fedora, Arch, …) and
+`linux-aarch64` on any 64-bit ARM Linux (Debian/Ubuntu arm64, Raspberry Pi
+OS 64-bit, …), whatever the kernel's page size (4, 16 or 64 KB). Downloaded
+files need `chmod +x` first.
+
 ### OpenWrt package architecture → binary
 
 | OpenWrt arch | Use |
