@@ -660,19 +660,19 @@ fn setup_render(x: &mut X, win: u32, sw: usize, sh: usize, ev: &mut EventQueue) 
     Some(rn)
 }
 
-/// Ask the window manager to switch the window in or out of fullscreen.
-fn toggle_fullscreen(x: &mut X, win: u32, net_state: u32, net_full: u32) {
+/// Ask the window manager to switch fullscreen off (0), on (1) or over (2).
+fn set_fullscreen(x: &mut X, win: u32, net_state: u32, net_full: u32, action: u32) {
     x.p8(25); // SendEvent to the root window
     x.p8(0);
     x.p16(11);
     x.p32(x.root);
     x.p32(0x18_0000); // SubstructureNotify | SubstructureRedirect
-    x.p8(33); // ClientMessage _NET_WM_STATE: toggle fullscreen
+    x.p8(33); // ClientMessage _NET_WM_STATE
     x.p8(32);
     x.p16(0);
     x.p32(win);
     x.p32(net_state);
-    for v in [2, net_full, 0, 1, 0] {
+    for v in [action, net_full, 0, 1, 0] {
         x.p32(v);
     }
 }
@@ -839,6 +839,8 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
     let mut dirty = true;
     let mut quit = false;
     let mut keys_down = [false; 256];
+    // Window managers that ignore the initial _NET_WM_STATE get asked again once mapped.
+    let mut full_on_map = args.fullscreen;
     let (mut cx, mut cy) = ((ww / 2) as i32, (wh / 2) as i32);
     while !quit && !e.quit_requested() {
         // ---- events: read what has arrived, then handle it in order
@@ -937,6 +939,10 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
                     e.release_all();
                 }
                 12 => dirty = true,
+                19 if full_on_map => {
+                    full_on_map = false;
+                    set_fullscreen(x, win, net_state, net_full, 1);
+                }
                 22 => {
                     ww = rd16(evb, 20) as usize;
                     wh = rd16(evb, 22) as usize;
@@ -954,7 +960,7 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> Resul
             }
         }
         if fullscreen {
-            toggle_fullscreen(x, win, net_state, net_full);
+            set_fullscreen(x, win, net_state, net_full, 2);
         }
         // ---- pointer grab follows the game state
         let want = e.wants_pointer() && focused && !args.nomouse;
