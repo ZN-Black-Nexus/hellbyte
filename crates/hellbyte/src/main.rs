@@ -47,23 +47,43 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8, envp: *const *const u8
 #[link(name = "c")]
 unsafe extern "C" {}
 
+// The prebuilt core library (used by native `cargo build` dev builds) is
+// compiled for unwinding and references these; Hellbyte aborts on panic, so
+// they are never called. Release builds optimise the references away.
+#[cfg(not(target_os = "windows"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_eh_personality() {}
+
+#[cfg(not(target_os = "windows"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn _Unwind_Resume() -> ! {
+    loop {}
+}
+
+/// A crash: put the screen back, say what went wrong and where, exit with 101.
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    use core::fmt::Write;
+    let mut msg: common::Buf<512> = common::Buf::new();
+    let _ = write!(msg, "hellbyte crashed: {}", info.message());
+    if let Some(l) = info.location() {
+        let _ = write!(msg, " (at {}:{})", l.file(), l.line());
+    }
+    let _ = msg.write_str("\n");
     #[cfg(target_os = "linux")]
     {
         linux::fb::restore_console();
-        linux::write_all(2, b"hellbyte: internal error (panic)\n");
+        linux::write_all(2, msg.as_bytes());
         linux::exit(101);
     }
     #[cfg(target_os = "windows")]
-    unsafe {
-        windows::sys::ExitProcess(101)
-    }
+    windows::crash(msg.as_bytes());
     #[cfg(target_os = "macos")]
     {
         macos::emergency_restore();
-        macos::write_all(2, b"hellbyte: internal error (panic)\n");
+        macos::write_all(2, msg.as_bytes());
+        macos::quit(101);
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     loop {}
 }

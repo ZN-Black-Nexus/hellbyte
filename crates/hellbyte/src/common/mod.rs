@@ -50,6 +50,13 @@ impl<const N: usize> Buf<N> {
     }
 }
 
+impl<const N: usize> core::fmt::Write for Buf<N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.push(s.as_bytes());
+        Ok(())
+    }
+}
+
 pub fn parse_u32(s: &[u8]) -> Option<u32> {
     if s.is_empty() {
         return None;

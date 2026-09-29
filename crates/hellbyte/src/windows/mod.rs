@@ -148,6 +148,18 @@ pub fn console_out(b: &[u8]) {
     }
 }
 
+/// A crash: print it to the console if there is one, show it in a message
+/// box (a double-clicked game has no console), and exit with code 101.
+pub fn crash(msg: &[u8]) -> ! {
+    console_out(msg);
+    let mut w = [0u16; 600];
+    let mut t = [0u16; 32];
+    unsafe {
+        MessageBoxW(0, wide(msg, &mut w).as_ptr(), wide(b"Hellbyte crashed", &mut t).as_ptr(), 0x10);
+        ExitProcess(101)
+    }
+}
+
 pub fn fatal(msg: &[u8]) -> ! {
     let mut w = [0u16; 256];
     let mut t = [0u16; 16];

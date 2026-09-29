@@ -36,6 +36,11 @@ const O_CREAT: i32 = 0x200;
 const O_TRUNC: i32 = 0x400;
 const TIOCGWINSZ: u64 = 0x4008_7468;
 
+/// Exit the process now.
+pub fn quit(code: i32) -> ! {
+    unsafe { exit(code) }
+}
+
 pub fn write_all(fd: i32, mut b: &[u8]) -> bool {
     while !b.is_empty() {
         let n = unsafe { write(fd, b.as_ptr(), b.len()) };
