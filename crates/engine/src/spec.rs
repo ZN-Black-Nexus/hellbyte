@@ -191,7 +191,13 @@ impl Game {
                 0 => {
                     self.movers[i].count -= 1;
                     if self.movers[i].count <= 0 {
-                        self.movers[i].dir = if mv.sub == DOOR_CLOSE30_OPEN { 1 } else { -1 };
+                        if mv.sub == DOOR_CLOSE30_OPEN {
+                            self.movers[i].dir = 1;
+                        } else if self.doorway_busy(sec, true) {
+                            self.movers[i].count = 35; // someone's in the way: look again in a second
+                        } else {
+                            self.movers[i].dir = -1;
+                        }
                     }
                 }
                 2 => {
@@ -200,6 +206,10 @@ impl Game {
                         self.movers[i].dir = 1;
                         self.movers[i].sub = DOOR_NORMAL;
                     }
+                }
+                -1 if matches!(mv.sub, DOOR_NORMAL | DOOR_BLAZE_RAISE) && self.doorway_busy(sec, false) => {
+                    // A monster is coming through: open up again before the door hits it.
+                    self.movers[i].dir = 1;
                 }
                 -1 => {
                     let floor = self.lv.sectors[sec].floor;
@@ -292,6 +302,32 @@ impl Game {
     }
 
     // ================================================================ doors
+
+    /// Is a monster that is after someone (or, with `players`, a player) in
+    /// or near the doorway of door sector `sec`? Doors that close by
+    /// themselves wait for them instead of shutting in their face.
+    fn doorway_busy(&self, sec: usize, players: bool) -> bool {
+        const NEAR: Fixed = 64 * FRACUNIT;
+        let (mut x0, mut y0, mut x1, mut y1) = (Fixed::MAX, Fixed::MAX, Fixed::MIN, Fixed::MIN);
+        for &l in self.lv.sector_lines(sec) {
+            let ld = self.lv.line(l as usize);
+            for v in [ld.v1, ld.v2] {
+                let p = self.lv.vert(v);
+                x0 = x0.min(p.x);
+                y0 = y0.min(p.y);
+                x1 = x1.max(p.x);
+                y1 = y1.max(p.y);
+            }
+        }
+        self.mobjs.iter().any(|mo| {
+            let who = if mo.is_player { players } else { mo.flags & MF_COUNTKILL != 0 && mo.target != NONE };
+            if !mo.in_use || mo.health <= 0 || !who {
+                return false;
+            }
+            let r = mo.radius + NEAR;
+            mo.x + r > x0 && mo.x - r < x1 && mo.y + r > y0 && mo.y - r < y1
+        })
+    }
 
     fn start_door(&mut self, sec: usize, sub: u8) -> bool {
         if self.lv.sectors[sec].mover != 0 {
@@ -1236,4 +1272,50 @@ mod tests {
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
+
+    /// A door that closes by itself waits while a monster that is after
+    /// someone stands near it, closes once it's gone, and opens up again if
+    /// one comes near while it is closing.
+    #[test]
+    fn doors_wait_for_monsters() {
+        let (_turn, g) = game();
+        g.setup_level(0, true);
+        let li = (0..g.lv.map.lines.len()).find(|&l| g.lv.map.lines[l].special == LineSpecial::DoorRepeat).unwrap();
+        let door = g.lv.back_sector(li).unwrap();
+        let pm = g.player.mo;
+        let start = (g.mo(pm).x, g.mo(pm).y);
+        let m = (0..g.mobjs.len()).find(|&i| g.mobjs[i].in_use && g.mobjs[i].flags & MF_COUNTKILL != 0).unwrap() as MRef;
+        let (nx, ny, mx, my) = front_normal(g, li);
+        // Open the door, then walk the player away and park an angry monster in front of it.
+        assert!(use_from_front(g, li, 24.0));
+        assert!(g.teleport_move(pm, start.0, start.1));
+        assert!(g.teleport_move(m, mx + at(nx * 48.0), my + at(ny * 48.0)));
+        g.mobjs[m as usize].target = pm;
+        let floor = g.lv.sectors[door].floor;
+        for _ in 0..90 {
+            g.update_specials();
+        }
+        let top = g.lv.sectors[door].ceil;
+        assert!(top - floor > 56 * FRACUNIT, "door didn't open");
+        for _ in 0..400 {
+            g.update_specials();
+            assert_eq!(g.lv.sectors[door].ceil, top, "door started closing on the monster");
+        }
+        // Monster calms down: the door closes.
+        g.mobjs[m as usize].target = NONE;
+        let mut closing = top;
+        for _ in 0..60 {
+            g.update_specials();
+            closing = closing.min(g.lv.sectors[door].ceil);
+        }
+        assert!(closing < top, "door never started closing");
+        // It comes back while the door is closing: the door opens again.
+        g.mobjs[m as usize].target = pm;
+        let before = g.lv.sectors[door].ceil;
+        for _ in 0..20 {
+            g.update_specials();
+        }
+        assert!(g.lv.sectors[door].ceil > before, "door didn't open again for the monster");
+    }
+
 }

@@ -16,7 +16,7 @@ style frame   floor=0 ceil=128 light=160 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 up
 style pframe  from=frame upper=PIPES1
 style sframe  from=frame upper=BASE1
 style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
-style bluedoor from=door upper=DOORBLU door=door_blue_repeat
+style bluedoor from=door upper=DOORBLU door=door_blue_stay
 style secdoor from=door upper=PIPES1 wall=PIPES1 door=door_stay
 style secret  floor=0 ceil=112 light=96 ftex=FLOOR4 ctex=CEIL2 wall=CEMENT1 special=secret
 style pump    floor=0 ceil=192 light=144 ftex=FLOOR4 ctex=CEIL2 wall=PIPES1 lower=STEP1

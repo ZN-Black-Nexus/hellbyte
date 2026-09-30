@@ -19,8 +19,8 @@ style mezz    from=wh floor=96 ftex=FLOOR4 lower=SUPPORT1 light=144
 style frame   floor=0 ceil=128 light=144 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=METAL1
 style mframe  from=frame floor=96 ceil=224
 style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
-style reddoor from=door floor=96 ceil=96 upper=DOORRED door=door_red_repeat
-style bluedoor from=door upper=DOORBLU door=door_blue_repeat
+style reddoor from=door floor=96 ceil=96 upper=DOORRED door=door_red_stay
+style bluedoor from=door upper=DOORBLU door=door_blue_stay
 style shutter from=door upper=LIFT1 door=none tag=5
 style secdoor from=door upper=BASE3 wall=BASE3 door=door_stay
 style secret  floor=0 ceil=112 light=96 ftex=WOODFLR ctex=CEIL2 wall=WOOD1 special=secret

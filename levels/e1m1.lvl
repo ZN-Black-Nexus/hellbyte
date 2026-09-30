@@ -19,7 +19,7 @@ style desk    from=ctrl floor=48 ftex=FLOOR2 lower=COMP1
 style window  floor=64 ceil=112 light=176 ftex=FLOOR4 ctex=CEIL2 wall=METAL1 upper=BASE3 lower=BASE3
 style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
 style door16  from=door floor=16 ceil=16
-style reddoor from=door upper=DOORRED door=door_red_repeat
+style reddoor from=door upper=DOORRED door=door_red_stay
 style secdoor from=door upper=BASE1 wall=BASE1 door=door_stay
 style secret  floor=0 ceil=112 light=112 ftex=FLOOR4 ctex=CEIL2 wall=PIPES1 special=secret
 style pit     floor=-48 ceil=208 light=144 ftex=FLOOR2 ctex=CEIL2 wall=STONE2 lower=STONE2

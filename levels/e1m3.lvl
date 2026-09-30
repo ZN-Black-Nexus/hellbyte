@@ -15,7 +15,7 @@ style bunker  floor=0 ceil=128 light=160 ftex=CEMENTF ctex=CEIL1 wall=CEMENT1
 style frame   floor=0 ceil=128 light=176 ftex=FLOOR4 ctex=CEIL2 wall=SUPPORT1 upper=CEMENT1
 style tframe  from=frame upper=TECH1
 style door    floor=0 ceil=0 light=160 ftex=FLOOR2 ctex=FLOOR2 wall=DOORTRAK upper=DOOR1 door=door_repeat
-style ydoor   from=door upper=DOORYEL door=door_yellow_repeat
+style ydoor   from=door upper=DOORYEL door=door_yellow_stay
 style tower   floor=0 ceil=256 light=176 ftex=FLOOR2 ctex=CEIL2 wall=TECH1 lower=METAL1
 style towerlt from=tower ctex=CEILLITE light=224
 style perch   from=tower floor=128 ftex=FLOOR1

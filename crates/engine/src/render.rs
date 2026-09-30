@@ -1062,7 +1062,7 @@ impl Renderer {
             return;
         }
         let frame = mo.frame & !FF_BRIGHT;
-        let rot = if models::rotates(mo.sprite) {
+        let rot = if models::rotates(mo.sprite, frame) {
             let ang = point_to_angle(tr_x, tr_y);
             (ang.wrapping_sub(mo.angle).wrapping_add(ANG45 / 4) >> 28) as u8
         } else {

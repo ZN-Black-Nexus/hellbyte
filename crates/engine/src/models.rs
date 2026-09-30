@@ -949,7 +949,35 @@ fn boom(cv: &mut Canvas, f: u8, w: i32, h: i32) {
     }
 }
 
-fn draw_effect(cv: &mut Canvas, spr: Spr, frame: u8, anim: u16) -> Dims {
+/// A rocket in flight seen from view `rot` (0 = from behind, 8 = nose first):
+/// the body lies along the flight line with the nose ahead, so it never
+/// travels sideways; the exhaust shows behind it, or glows round the body
+/// when it flies straight away from the viewer.
+fn rocket(cv: &mut Canvas, rot: u8, flick: i32, cx: i32, cy: i32) {
+    let cam = Cam::new(rot, cx, cy);
+    let (tail, _, tail_depth) = cam.proj(p3(-7, 0, 0));
+    let (base, _, _) = cam.proj(p3(5, 0, 0));
+    let (tip, _, tip_depth) = cam.proj(p3(9, 0, 0));
+    let away = tip_depth > tail_depth; // the nose is the far end
+    if !away {
+        glow(cv, tail, cy, 3 + flick, 5); // exhaust behind the body
+    }
+    if (base - tail).abs() <= 2 {
+        disc(cv, (base + tail) / 2, cy, 2, 13, 4, 12); // end on: round
+    } else {
+        tube_h(cv, tail.min(base), cy - 2, tail.max(base), cy + 2, 13, 4, 12);
+    }
+    if (tip - base).abs() >= 2 {
+        tri(cv, (base, cy - 2), (base, cy + 2), (tip, cy), sh(4, 12));
+    } else if !away {
+        disc(cv, tip, cy, 1, 4, 8, 13); // nose cone, head on
+    }
+    if away {
+        glow(cv, tail, cy, 3 + flick, 5); // exhaust in front of the body
+    }
+}
+
+fn draw_effect(cv: &mut Canvas, spr: Spr, frame: u8, rot: u8, anim: u16) -> Dims {
     let d = dims(spr, frame);
     cv.begin(d.w as usize, d.h as usize);
     let (w, h) = (d.w, d.h);
@@ -976,9 +1004,7 @@ fn draw_effect(cv: &mut Canvas, spr: Spr, frame: u8, anim: u16) -> Dims {
         }
         Spr::Rocket => {
             if frame == 0 {
-                tube_h(cv, 4, cy - 2, 16, cy + 2, 13, 4, 12);
-                tri(cv, (16, cy - 2), (16, cy + 2), (20, cy), sh(4, 12));
-                glow(cv, 3, cy, 3 + flick, 5);
+                rocket(cv, rot, flick, cx, cy);
             } else {
                 boom(cv, frame - 1, w, h);
             }
@@ -1189,11 +1215,13 @@ fn draw_weapon(cv: &mut Canvas, spr: Spr, frame: u8, anim: u16) -> Dims {
 
 // ------------------------------------------------------------------ public entry points
 
-pub fn rotates(spr: Spr) -> bool {
+/// Does this frame look different from different sides? (Then the renderer
+/// picks one of 16 views by the angle between the thing and the viewer.)
+pub fn rotates(spr: Spr, frame: u8) -> bool {
     matches!(
         spr,
         Spr::Player | Spr::Drone | Spr::Enforcer | Spr::Heavy | Spr::Fiend | Spr::Ripper | Spr::Gazer | Spr::Juggernaut | Spr::Corpse
-    )
+    ) || (spr == Spr::Rocket && frame == 0)
 }
 
 /// Canvas size and anchor for a sprite frame (cheap; used when projecting).
@@ -1300,7 +1328,7 @@ pub fn draw(cv: &mut Canvas, spr: Spr, frame: u8, rot: u8, anim: u16) -> Dims {
         | Spr::ArcTrace
         | Spr::Puff
         | Spr::Blood
-        | Spr::Fog => draw_effect(cv, spr, frame, anim),
+        | Spr::Fog => draw_effect(cv, spr, frame, rot, anim),
         _ => draw_item(cv, spr, frame, anim),
     }
 }
