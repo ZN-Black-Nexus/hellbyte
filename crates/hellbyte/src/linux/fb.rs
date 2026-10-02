@@ -212,7 +212,7 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, _env: &Env, args: &Args) -> Resu
             if nev == 0 {
                 let now = now_us() / 1000;
                 dec.feed(&tb[..n as usize], &mut |ev| {
-                    if held.press(ev.key, now) {
+                    if held.press(ev.key, now, &mut |k| e.key(k, false)) {
                         e.key(ev.key, true);
                     }
                 });

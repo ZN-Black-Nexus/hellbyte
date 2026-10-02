@@ -69,11 +69,65 @@ pub fn emergency_restore() {
 }
 
 fn winsize() -> (usize, usize) {
+    let (c, r, _) = winsize_px();
+    (c, r)
+}
+
+/// Columns, rows and width in pixels (0 if the terminal doesn't say).
+fn winsize_px() -> (usize, usize, usize) {
     let mut ws = [0u16; 4];
     if ioctl(1, nr::TIOCGWINSZ, ws.as_mut_ptr() as usize) == 0 && ws[0] > 0 && ws[1] > 0 {
-        (ws[1] as usize, ws[0] as usize)
+        (ws[1] as usize, ws[0] as usize, ws[2] as usize)
     } else {
-        (80, 24)
+        (80, 24, 0)
+    }
+}
+
+/// Mouse turning in a terminal: the pointer can't be captured, so moving it
+/// turns, and resting it at the left or right edge keeps turning.
+struct TermMouse {
+    last_x: Option<i32>,
+    /// -1 / 1 while the pointer rests at the left / right edge.
+    edge: i32,
+}
+
+impl TermMouse {
+    /// Turn speed at the edges, in the same units as pointer pixels per tic.
+    const EDGE_SPEED: i32 = 64;
+    /// The pointer stops at the window's sides, so turn faster than a
+    /// captured mouse would.
+    const PX_SCALE: i32 = 3;
+    /// Same, per character cell when the terminal only reports cells.
+    const CELL_SCALE: i32 = 24;
+
+    fn update(&mut self, e: &mut Engine, dec: &KeyDecoder, cols: usize, width_px: usize) {
+        let Some((x, _)) = dec.mouse else { return };
+        let (scale, width, margin) = if dec.pixel_mouse {
+            (Self::PX_SCALE, width_px as i32, (width_px as i32 / 50).max(4))
+        } else {
+            (Self::CELL_SCALE, cols as i32, 1)
+        };
+        if let Some(prev) = self.last_x {
+            if x != prev && e.wants_pointer() {
+                e.mouse_motion((x - prev) * scale, 0);
+            }
+        }
+        self.last_x = Some(x);
+        self.edge = if width <= 0 {
+            0 // pixel size unknown: no edge turning
+        } else if x <= margin {
+            -1
+        } else if x > width - margin {
+            1
+        } else {
+            0
+        };
+    }
+
+    fn tic(&self, e: &mut Engine) {
+        if self.edge != 0 && e.wants_pointer() {
+            e.mouse_motion(self.edge * Self::EDGE_SPEED, 0);
+        }
     }
 }
 
@@ -94,6 +148,9 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 {
     tui.rows = rows;
     write_all(1, Tui::ENTER);
     write_all(1, Tui::KITTY_QUERY);
+    if !args.nomouse {
+        write_all(1, Tui::MOUSE_ON);
+    }
     let (w, h) = tui.view_size();
     e.init(w, h, true, host);
     e.set_text_ui(true);
@@ -104,6 +161,10 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 {
     let mut dec = KeyDecoder::new();
     let mut held = HeldKeys::new();
     let mut kitty_on = false;
+    let mut pixels_on = false;
+    let mut hinted = false;
+    let mut mouse = TermMouse { last_x: None, edge: 0 };
+    let mut width_px = winsize_px().2;
     let tic_us: u64 = 1_000_000 / 35;
     let frame_us: u64 = 1_000_000 / args.fps.max(1) as u64;
     let mut next_tic = now_us();
@@ -126,6 +187,10 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 {
                 if dec_kitty_hint(ev.key) {
                     return;
                 }
+                if (KEY_MOUSE1..=KEY_WHEELDOWN).contains(&ev.key) {
+                    e.key(ev.key, ev.down); // mouse buttons report releases everywhere
+                    return;
+                }
                 if kitty_on {
                     if ev.shift && ev.down {
                         e.key(KEY_SHIFT, true);
@@ -135,17 +200,30 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 {
                 }
                 // No key-up events: synthesise them from the auto-repeat stream.
                 if ev.shift {
-                    if held.press(KEY_SHIFT, now) {
+                    if held.press(KEY_SHIFT, now, &mut |k| e.key(k, false)) {
                         e.key(KEY_SHIFT, true);
                     }
                 }
-                if held.press(ev.key, now) {
+                if held.press(ev.key, now, &mut |k| e.key(k, false)) {
                     e.key(ev.key, true);
                 }
             });
             if dec.quit {
                 break;
             }
+            if !args.nomouse {
+                mouse.update(e, &dec, tui.cols, width_px);
+            }
+        }
+        if dec.pixel_mouse && !pixels_on && !args.nomouse {
+            pixels_on = true;
+            write_all(1, Tui::MOUSE_PIXELS);
+            mouse.last_x = None; // positions change units
+        }
+        if dec.answered && !dec.kitty && !hinted && e.wants_pointer() {
+            // Only now do we know key releases won't come.
+            hinted = true;
+            e.hint("Held keys cancel each other here: turn with the mouse, or use kitty/foot");
         }
         if dec.kitty && !kitty_on {
             // Terminal supports release events: switch them on.
@@ -165,6 +243,7 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 {
         let now = now_us();
         let mut steps = 0;
         while now >= next_tic && steps < 4 {
+            mouse.tic(e);
             e.tick(host);
             next_tic += tic_us;
             steps += 1;
@@ -181,6 +260,7 @@ pub fn run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 {
                 tui.cols = c;
                 tui.rows = r;
                 tui.force = true;
+                width_px = winsize_px().2;
                 let (w, h) = tui.view_size();
                 e.resize(w, h, true);
             }

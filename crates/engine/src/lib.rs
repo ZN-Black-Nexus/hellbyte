@@ -407,6 +407,11 @@ impl Engine {
         }
     }
 
+    /// Show a one-off message on the HUD (frontend tips).
+    pub fn hint(&mut self, m: &'static str) {
+        self.g.msg(m);
+    }
+
     pub fn mouse_motion(&mut self, dx: i32, _dy: i32) {
         self.mouse_dx += dx;
     }

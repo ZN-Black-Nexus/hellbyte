@@ -322,7 +322,7 @@ fn term_run(e: &mut Engine, host: &mut dyn Host, env: &Env, args: &Args) -> i32 
                 }
                 if kitty {
                     e.key(ev.key, ev.down);
-                } else if held.press(ev.key, now) {
+                } else if held.press(ev.key, now, &mut |k| e.key(k, false)) {
                     e.key(ev.key, true);
                 }
             });

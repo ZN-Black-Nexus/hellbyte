@@ -162,11 +162,19 @@ impl Tui {
     /// Escape sequence to enter full-screen mode (alternate screen, hidden cursor).
     pub const ENTER: &'static [u8] = b"\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[2J";
     /// Undo everything we changed, including the kitty keyboard mode.
-    pub const LEAVE: &'static [u8] = b"\x1b[<u\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l";
+    pub const LEAVE: &'static [u8] =
+        b"\x1b[?1016l\x1b[?1006l\x1b[?1003l\x1b[<u\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l";
     /// Ask the terminal for "report key releases" (kitty protocol, flags 1|2|8).
     pub const KITTY_ON: &'static [u8] = b"\x1b[>11u";
-    /// Query whether the kitty protocol is supported (reply: CSI ? flags u).
-    pub const KITTY_QUERY: &'static [u8] = b"\x1b[?u\x1b[c";
+    /// Query whether the kitty protocol (reply: CSI ? flags u) and pixel mouse
+    /// positions (CSI ? 1016 ; n $ y) are supported. The device-attributes
+    /// query at the end is answered by every terminal, so its reply tells us
+    /// all earlier answers are in.
+    pub const KITTY_QUERY: &'static [u8] = b"\x1b[?u\x1b[?1016$p\x1b[c";
+    /// Report mouse buttons and all motion, in the SGR format.
+    pub const MOUSE_ON: &'static [u8] = b"\x1b[?1003h\x1b[?1006h";
+    /// Mouse positions in pixels instead of character cells.
+    pub const MOUSE_PIXELS: &'static [u8] = b"\x1b[?1016h";
 
     fn update_maps(&mut self, pal: &[u8; 768]) {
         let mut h: u32 = 0x811c_9dc5;
@@ -371,6 +379,13 @@ pub struct KeyDecoder {
     len: usize,
     pub kitty: bool,
     pub quit: bool,
+    /// The terminal answered the device-attributes query (so it has also
+    /// answered everything asked before it).
+    pub answered: bool,
+    /// The terminal can report mouse positions in pixels.
+    pub pixel_mouse: bool,
+    /// Last mouse position (1-based cells, or pixels in pixel mode).
+    pub mouse: Option<(i32, i32)>,
 }
 
 pub struct KeyEvent {
@@ -381,7 +396,7 @@ pub struct KeyEvent {
 
 impl KeyDecoder {
     pub const fn new() -> KeyDecoder {
-        KeyDecoder { buf: [0; 64], len: 0, kitty: false, quit: false }
+        KeyDecoder { buf: [0; 64], len: 0, kitty: false, quit: false, answered: false, pixel_mouse: false, mouse: None }
     }
 
     /// Feed raw bytes; complete keys are passed to `emit`. A lone ESC at the
@@ -394,9 +409,10 @@ impl KeyDecoder {
             }
         }
         let mut i = 0;
+        let buf = self.buf; // decode() updates our other fields
         while i < self.len {
-            let rest = &self.buf[i..self.len];
-            match decode(rest, &mut self.kitty) {
+            let rest = &buf[i..self.len];
+            match decode(rest, self) {
                 Decoded::Key(n, k, down, shift) => {
                     if k == 3 {
                         self.quit = true; // Ctrl+C
@@ -465,7 +481,7 @@ fn params(p: &[u8], out: &mut [u32; 4]) -> usize {
     n + 1
 }
 
-fn decode(rest: &[u8], kitty: &mut bool) -> Decoded {
+fn decode(rest: &[u8], st: &mut KeyDecoder) -> Decoded {
     let b = rest[0];
     if b != 0x1b {
         let key = match b {
@@ -488,11 +504,40 @@ fn decode(rest: &[u8], kitty: &mut bool) -> Decoded {
             let fin = rest[end];
             let body = &rest[2..end];
             if body.first() == Some(&b'?') {
-                // Reply to our kitty query: CSI ? flags u ; or device attributes.
-                if fin == b'u' {
-                    *kitty = true;
+                // Replies to our queries: CSI ? flags u (kitty), CSI ? 1016 ; n $ y
+                // (pixel mouse: 1 = on, 2 = off but supported), CSI ? ... c.
+                let mut p = [0u32; 4];
+                params(&body[1..], &mut p);
+                match fin {
+                    b'u' => st.kitty = true,
+                    b'y' if p[0] == 1016 && matches!(p[1], 1 | 2) => st.pixel_mouse = true,
+                    b'c' => st.answered = true,
+                    _ => {}
                 }
                 return Decoded::Skip(end + 1);
+            }
+            if body.first() == Some(&b'<') {
+                // SGR mouse: CSI < button ; x ; y (M = press/motion, m = release)
+                let mut p = [0u32; 4];
+                params(&body[1..], &mut p);
+                let b = p[0];
+                st.mouse = Some((p[1] as i32, p[2] as i32));
+                let key = if b & 64 != 0 {
+                    if b & 1 == 0 { KEY_WHEELUP } else { KEY_WHEELDOWN }
+                } else if b & 32 != 0 {
+                    0 // motion only
+                } else {
+                    match b & 3 {
+                        0 => KEY_MOUSE1,
+                        1 => KEY_MOUSE3,
+                        2 => KEY_MOUSE2,
+                        _ => 0,
+                    }
+                };
+                if key == 0 || (b & 64 != 0 && fin == b'm') {
+                    return Decoded::Skip(end + 1);
+                }
+                return Decoded::Key(end + 1, key, fin == b'M', false);
             }
             let mut p = [0u32; 4];
             let n = params(body, &mut p);
@@ -590,38 +635,187 @@ fn decode(rest: &[u8], kitty: &mut bool) -> Decoded {
 
 /// Emulates key-up events for terminals that only send key presses: a key
 /// counts as held while presses (auto-repeat) keep arriving.
+///
+/// Such terminals only auto-repeat the *last* key pressed, so holding W and
+/// then pressing Left silences W even though it is still down. To let keys
+/// overlap, a key that was being held (or a movement key) when a different
+/// key arrived is "carried": it stays down for as long as any newer key keeps
+/// repeating, and is released together with the last of them.
 pub struct HeldKeys {
-    keys: [(u16, u64); 16],
+    keys: [Held; 16],
+    last: u16,
+}
+
+#[derive(Clone, Copy)]
+struct Held {
+    key: u16,
+    /// Release time if no more repeats arrive (0 = slot free).
+    until: u64,
+    /// Seen auto-repeat, so it was really held down.
+    repeating: bool,
+    carried: bool,
+}
+
+const FREE: Held = Held { key: 0, until: 0, repeating: false, carried: false };
+
+/// Keys worth keeping down through other keys even after a single press:
+/// walking a little too far is harmless, losing the walk mid-turn is not.
+fn is_move(k: u16) -> bool {
+    matches!(k, KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT) || matches!(k as u8, b'w' | b'a' | b's' | b'd' | b',' | b'.') && k < 128
+}
+
+/// Pressing W after S (or Left after Right...) means the other was let go.
+fn same_axis(a: u16, b: u16) -> bool {
+    // fold Up/Down onto W/S, then compare axes
+    let axis = |k: u16| match k {
+        KEY_UP | KEY_DOWN => 1,
+        KEY_LEFT | KEY_RIGHT => 2,
+        _ if k < 128 => match k as u8 {
+            b'w' | b's' => 1,
+            b'a' | b'd' | b',' | b'.' => 3,
+            _ => 0,
+        },
+        _ => 0,
+    };
+    a != b && axis(a) != 0 && axis(a) == axis(b)
 }
 
 impl HeldKeys {
     pub const fn new() -> HeldKeys {
-        HeldKeys { keys: [(0, 0); 16] }
+        HeldKeys { keys: [FREE; 16], last: 0 }
     }
 
     /// Returns true if this is a new press (engine should get key-down).
-    pub fn press(&mut self, key: u16, now_ms: u64) -> bool {
-        for k in self.keys.iter_mut() {
-            if k.0 == key && k.1 != 0 {
-                // Auto-repeat: extend the hold a little past the repeat interval.
-                k.1 = now_ms + 110;
-                return false;
+    /// Keys that the press implies were released are passed to `up`.
+    pub fn press(&mut self, key: u16, now_ms: u64, up: &mut dyn FnMut(u16)) -> bool {
+        if key != self.last {
+            for k in self.keys.iter_mut().filter(|k| k.until != 0 && k.key != key) {
+                if same_axis(k.key, key) {
+                    // W then S: the player switched direction.
+                    up(k.key);
+                    *k = FREE;
+                } else if k.repeating || is_move(k.key) {
+                    k.carried = true;
+                }
             }
+            self.last = key;
         }
-        if let Some(k) = self.keys.iter_mut().find(|k| k.1 == 0) {
+        if let Some(k) = self.keys.iter_mut().find(|k| k.until != 0 && k.key == key) {
+            // Auto-repeat: extend the hold a little past the repeat interval.
+            k.until = now_ms + 110;
+            k.repeating = true;
+            k.carried = false;
+            return false;
+        }
+        if let Some(k) = self.keys.iter_mut().find(|k| k.until == 0) {
             // First press: hold long enough to bridge the terminal's repeat delay.
-            *k = (key, now_ms + 520);
+            *k = Held { key, until: now_ms + 520, repeating: false, carried: false };
         }
         true
     }
 
     /// Release keys whose repeat stream stopped; calls `up(key)` for each.
     pub fn expire(&mut self, now_ms: u64, up: &mut dyn FnMut(u16)) {
-        for k in self.keys.iter_mut() {
-            if k.1 != 0 && now_ms >= k.1 {
-                up(k.0);
-                *k = (0, 0);
+        let mut live = false;
+        for k in self.keys.iter_mut().filter(|k| k.until != 0 && !k.carried) {
+            if now_ms >= k.until {
+                up(k.key);
+                *k = FREE;
+            } else {
+                live = true;
             }
         }
+        if !live {
+            for k in self.keys.iter_mut().filter(|k| k.until != 0) {
+                up(k.key);
+                *k = FREE;
+            }
+            self.last = 0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(events: &[(u64, u16)], until: u64) -> [[bool; 3]; 64] {
+        // returns, every 50 ms, whether w / left / s are down
+        let mut held = HeldKeys::new();
+        let mut down = [false; KEY_COUNT];
+        let mut out = [[false; 3]; 64];
+        let mut ev = events.iter().peekable();
+        for t in 0..until {
+            while let Some(&&(at, k)) = ev.peek() {
+                if at != t {
+                    break;
+                }
+                ev.next();
+                if held.press(k, t, &mut |u| down[u as usize] = false) {
+                    down[k as usize] = true;
+                }
+            }
+            held.expire(t, &mut |u| down[u as usize] = false);
+            if t % 50 == 0 && ((t / 50) as usize) < out.len() {
+                out[(t / 50) as usize] = [down[b'w' as usize], down[KEY_LEFT as usize], down[b's' as usize]];
+            }
+        }
+        out
+    }
+
+    fn repeat(k: u16, from: u64, to: u64, v: &mut alloc_free::Vec) {
+        v.push((from, k));
+        let mut t = from + 500;
+        while t < to {
+            v.push((t, k));
+            t += 33;
+        }
+    }
+
+    mod alloc_free {
+        pub struct Vec {
+            pub items: [(u64, u16); 256],
+            pub len: usize,
+        }
+        impl Vec {
+            pub fn new() -> Vec {
+                Vec { items: [(0, 0); 256], len: 0 }
+            }
+            pub fn push(&mut self, x: (u64, u16)) {
+                self.items[self.len] = x;
+                self.len += 1;
+            }
+            pub fn sorted(&mut self) -> &[(u64, u16)] {
+                self.items[..self.len].sort();
+                &self.items[..self.len]
+            }
+        }
+    }
+
+    #[test]
+    fn walking_survives_turning() {
+        // hold W from 0 ms, hold Left from 1000 to 2000 ms (W repeat stops then)
+        let mut v = alloc_free::Vec::new();
+        repeat(b'w' as u16, 0, 1000, &mut v);
+        repeat(KEY_LEFT, 1000, 2000, &mut v);
+        let o = run(v.sorted(), 3000);
+        assert!(o[25][0] && o[25][1], "walking and turning at 1.25 s");
+        assert!(o[30][0] && o[30][1], "walking and turning at 1.5 s");
+        assert!(!o[45][0] && !o[45][1], "everything released after the stream ends");
+    }
+
+    #[test]
+    fn reversing_releases_the_old_direction() {
+        let mut v = alloc_free::Vec::new();
+        repeat(b'w' as u16, 0, 1000, &mut v);
+        repeat(b's' as u16, 1000, 2000, &mut v);
+        let o = run(v.sorted(), 2500);
+        assert!(!o[30][0] && o[30][2]);
+    }
+
+    #[test]
+    fn a_tap_is_released() {
+        let o = run(&[(0, b'w' as u16)], 2000);
+        assert!(o[5][0] && !o[15][0]);
     }
 }

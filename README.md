@@ -110,8 +110,14 @@ Saves live in `~/.local/share/hellbyte` (Linux), `%APPDATA%\Hellbyte`
 font means more pixels (up to 320x200). Truecolor terminals look best
 (`--colors 24|256|16|2` to override). Terminals that support the kitty
 keyboard protocol (kitty, foot, WezTerm, Ghostty, recent Alacritty) report
-real key releases; in others a held key is inferred from auto-repeat, which
-feels a little sticky. Ctrl+C always quits.
+real key releases, so any keys combine just like in the window. Other
+terminals (GNOME Terminal, Konsole, xterm...) only repeat the last key
+pressed, so Hellbyte guesses: a held key or movement key keeps going while
+you hold another (walk + turn works), but once you let go of the second key
+you need to press the first again. The mouse works in every terminal and
+never interrupts keys: move it to turn, rest it at the left or right edge to
+keep turning, left click fires, right click opens (`--nomouse` turns this
+off). Ctrl+C always quits.
 
 ## Building
 
